@@ -1,0 +1,36 @@
+<mxGraphModel dx="1000" dy="600" grid="1">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="2" style="newsletterRequest" metaType="webform" parent="1" vertex="1">
+      <Object name="Satisfaction~br~Survey" webformId="812L" ready="1" as="value"/>
+      <mxGeometry as="geometry" x="40" y="40" width="60" height="60"/>
+    </mxCell>
+    <mxCell id="3" style="flow" parent="1" vertex="1">
+      <Object name="Satisfied" flowType="Stop" ready="1" published="0" as="value"/>
+      <mxGeometry as="geometry" x="240" y="40" width="80" height="60"/>
+    </mxCell>
+    <mxCell id="34" style="decision" parent="1" vertex="1">
+      <Object initialized="1" ready="1" published="1" name="Applied~br~Already?" as="value">
+        <Array as="decisions">
+          <Object decisionId="479L" flowId="3"/>
+          <Object decisionId="481L" flowId="32"/>
+        </Array>
+      </Object>
+      <mxGeometry as="geometry" x="160" y="80" width="32" height="32"/>
+    </mxCell>
+    <mxCell id="44" style="someFutureNodeType" parent="1" vertex="1">
+      <Object name="Unknown Thing" as="value"/>
+      <mxGeometry as="geometry" x="400" y="80" width="32" height="32"/>
+    </mxCell>
+    <mxCell id="55" style="decision" parent="1" vertex="1">
+      <Object initialized="0" ready="0" name="Unconfigured" as="value"/>
+      <mxGeometry as="geometry" x="500" y="80" width="32" height="32"/>
+    </mxCell>
+    <mxCell id="70" style="timerDelay" parent="3" vertex="1">
+      <Object name="Wait 30 minutes" waitDelay="30" waitDelayType="Minute" as="value"/>
+      <mxGeometry as="geometry" x="10" y="10" width="40" height="40"/>
+    </mxCell>
+    <mxCell id="e1" edge="1" parent="1" source="2" target="34"/>
+  </root>
+</mxGraphModel>
