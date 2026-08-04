@@ -1,0 +1,5 @@
+node_modules/
+storageState.json
+artifacts/
+*.log
+.DS_Store
