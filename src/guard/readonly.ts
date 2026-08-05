@@ -1,10 +1,27 @@
 import type { APIResponse, BrowserContext } from 'playwright';
 
-/** Matched against the URL pathname only — see the note on classifyRequest. */
-export const WRITE_URL_PATTERN = /(save|publish|delete|template|hotSwap)/i;
+/**
+ * Matched against the URL pathname only — see the note on classifyRequest.
+ *
+ * `/template$` is anchored deliberately. The observed dangerous URL was
+ * PUT /app/authoring/<a>/<b>/template, a path *ending* in /template, while
+ * /Reports/searchTemplate.jsp — the automations report enumeration depends on —
+ * merely contains the word. An unanchored match blocks our own endpoint.
+ */
+export const WRITE_URL_PATTERN = /(save|publish|delete|hotSwap|reportActions|\/template$)/i;
 
-/** Only paths under this prefix are subject to WRITE_URL_PATTERN. */
-export const GUARDED_PATH_PREFIX = '/app/';
+/**
+ * Prefixes exempt from the denylist: static assets, which cannot change state
+ * and legitimately carry words like "template" in their filenames.
+ */
+export const STATIC_PATH_PREFIXES = [
+  '/resources/',
+  '/css/',
+  '/js/',
+  '/images/',
+  '/slices/',
+  '/files/',
+];
 
 export type BlockReason = 'non-get' | 'denylist';
 
@@ -30,15 +47,17 @@ export interface Guard {
  * Returns the reason a request must be blocked, or null if it is allowed.
  * Pure — this is the entire read-only policy.
  *
- * WRITE_URL_PATTERN is matched against the pathname only, and only under
- * /app/. Two reasons:
+ * The denylist applies to every path. It previously applied only under /app/,
+ * which left this allowed:
  *
- *   - Static assets under /resources/ legitimately contain words like
- *     "template" in their filenames. Aborting them breaks editor rendering
- *     without preventing any write.
- *   - Decision-editor URLs carry &title=<cell name>, and a campaign author is
- *     free to name a node "Save for later". Matching the query string would
- *     abort that perfectly legitimate GET.
+ *   GET /Reports/reportActions.jsp?actionName=Unpublish+and+Delete+Automations
+ *
+ * That URL sits in the Actions menu of the automations report this extractor
+ * reads. Static asset prefixes are exempted instead, since they cannot change
+ * state and legitimately carry words like "template" in their filenames.
+ *
+ * The query string stays out of scope: decision-editor URLs carry
+ * &title=<cell name>, and an author is free to name a node "Save for later".
  *
  * Actual writes are blocked unconditionally by method, so the path pattern is
  * defence in depth rather than the primary control.
@@ -54,9 +73,8 @@ export function classifyRequest(method: string, url: string): BlockReason | null
     return 'denylist';
   }
 
-  if (pathname.startsWith(GUARDED_PATH_PREFIX) && WRITE_URL_PATTERN.test(pathname)) {
-    return 'denylist';
-  }
+  if (STATIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
+  if (WRITE_URL_PATTERN.test(pathname)) return 'denylist';
 
   return null;
 }
