@@ -167,5 +167,72 @@ code; the log covers browser traffic only.
   across the full corpus before designing the normaliser's step taxonomy.
 - **`RuleValue.id` is a misnomer** for form-option rules, where the value is a literal boolean rather
   than an entity reference. Harmless as raw capture; the normaliser should model the two cases apart.
-- **Session lifetime** over a long run (handoff §14 Q8). Two campaigns prove nothing about 398.
 - **Rate limits** on both the app and the API (handoff §14 Q10).
+
+## 8. Multi-app support
+
+Added 2026-08-04. Each Keap account is an **app**, identified by its subdomain. Sessions live at
+`.sessions/<app>.json` and artifacts at `artifacts/<app>/campaigns/<funnelId>/`.
+
+### Session lifetime — partial answer to handoff §14 Q8
+
+A session created at 17:33 was still working at 22:05 for campaign 987, then failed on the very next
+command for campaign 584:
+
+```
+Session expired — landed on https://login.labs.thryv.com/u/login/identifier?state=...
+```
+
+Inspecting the saved cookies afterwards: of 12 cookies, 10 carry an explicit expiry and **2 had
+already passed it, the earliest at 18:03** — roughly 30 minutes after login. The session survived
+several hours of disuse but lapsed between two back-to-back runs.
+
+**This is the single biggest operational risk to a 398-campaign run.** At this cadence a bulk
+extraction cannot complete on one login. Before the bulk run, the extractor needs either a
+`/app/session/keepAlive` ping on a timer, or expiry detection with resumable progress so a lapse
+costs one campaign rather than the whole run. Note that the editor already issues `keepAlive` itself
+on every page load, which was evidently not sufficient.
+
+The failure was clean: a readable message, no stack trace, and **nothing written** — the
+verification-before-write ordering held.
+
+### Cross-app access — still unanswered, but largely defused
+
+The plan intended to answer whether the `.infusionsoft.com` wildcard cookie grants one app's session
+access to another app's subdomain. It could not be answered, because per-app session files make the
+attempt impossible:
+
+```
+$ npm run spike -- --app abc12345 --funnel 987
+No session for "abc12345" at .sessions/abc12345.json. Run:  npm run login -- --app abc12345
+```
+
+The run stops before any network request. This is a stronger property than the design aimed for —
+the wildcard cookie never gets an opportunity — but it means **the underlying question remains open**
+and would need a second real app to settle.
+
+The residual risk is an operator holding sessions for two apps who targets the wrong host. That path
+was tested directly, by copying the `jordan` session to `.sessions/abc12345.json` and pointing it at
+`jordan`'s real host:
+
+```
+KEAP_BASE_URL is set — using https://jordan.infusionsoft.com instead of the URL derived
+from app "abc12345". Artifacts are still filed under "abc12345".
+  app mismatch: asked for "abc12345" but draftXml says "jordan"
+identity check failed — nothing was written
+```
+
+No directory was created. The guard works end to end, and the `KEAP_BASE_URL` override announces
+itself so a stale environment variable cannot silently redirect a run.
+
+### Input validation
+
+App names and funnel ids are interpolated into both URLs and filesystem paths, so both are validated
+before use. `--app ../../../etc`, `--app evil.com/x`, `--funnel ../etc` and `--funnel abc` are all
+rejected without launching a browser or creating a directory.
+
+### Verified layout
+
+Both campaigns re-extracted under the new structure. Campaign 584 came back at **11,185 chars / 43
+cells — a delta of 0 against the handoff baseline**. `meta.json` now leads with `appName`, so an
+artifact identifies its own origin even if moved. Both runs allowed 0 non-GET requests.
