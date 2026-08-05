@@ -53,3 +53,21 @@ export function assertAuthenticated(page: Page): void {
     );
   }
 }
+
+/**
+ * Throws if an API response was redirected to a sign-in screen.
+ *
+ * safeGet has no Page, so assertAuthenticated cannot cover it. An expired
+ * session there returns HTTP 200 with login markup, which every parser then
+ * reports as unrecognised content — sending the reader after a parser bug when
+ * the actual fix is to log in again.
+ */
+export function assertResponseAuthenticated(response: { url(): string }): void {
+  const url = response.url();
+  if (LOGIN_URL_PATTERN.test(url)) {
+    throw new Error(
+      `Session expired — request was redirected to ${url}. ` +
+        'Re-run:  npm run login -- --app <appName>',
+    );
+  }
+}

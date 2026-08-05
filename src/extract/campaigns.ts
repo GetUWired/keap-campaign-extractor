@@ -1,4 +1,5 @@
 import type { BrowserContext } from 'playwright';
+import { assertResponseAuthenticated } from '../auth/session.js';
 import { safeGet } from '../guard/readonly.js';
 import { type CampaignList, parseCampaignList } from '../parse/campaignList.js';
 
@@ -27,5 +28,8 @@ export async function fetchCampaignList(
   perPage: number = DEFAULT_PER_PAGE,
 ): Promise<CampaignList> {
   const response = await safeGet(context, campaignListUrl(baseUrl, perPage));
+  // An expired session returns 200 with login markup, which would otherwise
+  // surface as "this doesn't look like the automations list".
+  assertResponseAuthenticated(response);
   return parseCampaignList(await response.text());
 }
