@@ -1,9 +1,10 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { campaignDirFor, normalizeAppName, normalizeFunnelId, verifyIdentity } from '../app.js';
 import { closeSession, openSession } from '../auth/session.js';
 import { extractCampaign } from '../extract/campaign.js';
 import { fetchDecision } from '../extract/decision.js';
-import { parseCells } from '../parse/cells.js';
+import { parseCells, parseIdentity } from '../parse/cells.js';
 
 /** Recorded in keap-campaign-extractor-handoff.md sections 2 and 8. Informational only. */
 const BASELINES: Record<string, { chars: number; cells: number }> = {
@@ -12,17 +13,24 @@ const BASELINES: Record<string, { chars: number; cells: number }> = {
 };
 
 interface Args {
+  app: string;
   funnelId: string;
   headed: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
+  const usage = 'Usage: npm run spike -- --app <appName> --funnel <funnelId> [--headed]';
+  const appIndex = argv.indexOf('--app');
   const funnelIndex = argv.indexOf('--funnel');
-  const funnelId = funnelIndex >= 0 ? argv[funnelIndex + 1] : undefined;
-  if (!funnelId) {
-    throw new Error('Usage: npm run spike -- --funnel <funnelId> [--headed]');
-  }
-  return { funnelId, headed: argv.includes('--headed') };
+  const rawApp = appIndex >= 0 ? argv[appIndex + 1] : undefined;
+  const rawFunnel = funnelIndex >= 0 ? argv[funnelIndex + 1] : undefined;
+  if (!rawApp || !rawFunnel) throw new Error(usage);
+
+  return {
+    app: normalizeAppName(rawApp),
+    funnelId: normalizeFunnelId(rawFunnel),
+    headed: argv.includes('--headed'),
+  };
 }
 
 /** Prints `message` without a stack trace and marks the run as failed. */
@@ -45,27 +53,43 @@ async function main(): Promise<void> {
 
   let session: Awaited<ReturnType<typeof openSession>>;
   try {
-    session = await openSession({ headless: !args.headed });
+    session = await openSession({ app: args.app, headless: !args.headed });
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
     return;
   }
 
-  // Created only once the session is known good, so a failed run leaves no
-  // empty artifacts directory behind.
-  const outDir = join('artifacts', args.funnelId);
-  const decisionsDir = join(outDir, 'decisions');
-  // Clear prior decision output first. A stale .attempt-N.html from a failed
-  // run sitting beside a successful .html reads as though both happened.
-  await rm(decisionsDir, { recursive: true, force: true });
-  await mkdir(decisionsDir, { recursive: true });
+  if (process.env.KEAP_BASE_URL) {
+    console.log(
+      `\nKEAP_BASE_URL is set — using ${session.baseUrl} instead of the URL derived ` +
+        `from app "${args.app}". Artifacts are still filed under "${args.app}".`,
+    );
+  }
 
   let failed = false;
 
   try {
     const page = await session.context.newPage();
-    const campaign = await extractCampaign(page, args.funnelId);
+    const campaign = await extractCampaign(page, session.baseUrl, args.funnelId);
+
+    // Verify BEFORE creating any directory. A refused run must leave nothing
+    // behind — an empty client folder is exactly the confusion this prevents.
+    const identity = parseIdentity(campaign.draftXml);
+    const check = verifyIdentity({ app: args.app, funnelId: args.funnelId }, identity);
+    for (const warning of check.warnings) console.log(`  warning: ${warning}`);
+    if (!check.ok) {
+      for (const error of check.errors) console.error(`  ${error}`);
+      fail('identity check failed — nothing was written');
+      return;
+    }
+
     const inventory = parseCells(campaign.draftXml);
+    const outDir = campaignDirFor(args.app, args.funnelId);
+    const decisionsDir = join(outDir, 'decisions');
+    // Clear prior decision output first. A stale .attempt-N.html from a failed
+    // run sitting beside a successful .html reads as though both happened.
+    await rm(decisionsDir, { recursive: true, force: true });
+    await mkdir(decisionsDir, { recursive: true });
 
     await writeFile(join(outDir, 'draft.xml'), campaign.draftXml, 'utf8');
     await writeFile(join(outDir, 'publish.xml'), campaign.publishXml, 'utf8');
@@ -75,6 +99,7 @@ async function main(): Promise<void> {
       join(outDir, 'meta.json'),
       JSON.stringify(
         {
+          appName: identity.appName ?? args.app,
           ...meta,
           publishXmlLength: publishXml.length,
           neverPublished: publishXml.length === 0,
@@ -86,7 +111,9 @@ async function main(): Promise<void> {
       'utf8',
     );
 
-    console.log(`\ncampaign ${args.funnelId} — "${campaign.funnelName ?? '(no name)'}"`);
+    console.log(
+      `\n[${args.app}] campaign ${args.funnelId} — "${campaign.funnelName ?? '(no name)'}"`,
+    );
 
     const baseline = BASELINES[args.funnelId];
     const cellCount = inventory.cellCount;
@@ -105,7 +132,7 @@ async function main(): Promise<void> {
     for (const warning of inventory.warnings) console.log(`  warning: ${warning}`);
 
     for (const cell of inventory.decisions) {
-      const result = await fetchDecision(session.context, cell);
+      const result = await fetchDecision(session.context, session.baseUrl, cell);
 
       if (result.html && result.criteria) {
         await writeFile(join(decisionsDir, `${cell.cellId}.html`), result.html, 'utf8');
@@ -119,7 +146,6 @@ async function main(): Promise<void> {
           `  decision ${cell.cellId}: HIT on candidate ${hitIndex + 1} — ` +
             `${result.criteria.wrappers.length} branch(es)`,
         );
-        console.log(`    url: ${result.attempts[hitIndex]?.url ?? '(unknown)'}`);
         for (const warning of result.criteria.warnings) console.log(`    warning: ${warning}`);
       } else {
         failed = true;
@@ -154,7 +180,7 @@ async function main(): Promise<void> {
     await closeSession(session);
   }
 
-  process.exitCode = failed ? 1 : 0;
+  if (failed) process.exitCode = 1;
 }
 
 await main();
