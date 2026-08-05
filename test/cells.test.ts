@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { cleanName, parseCells, stripLongSuffix } from '../src/parse/cells.js';
+import { cleanName, parseCells, parseIdentity, stripLongSuffix } from '../src/parse/cells.js';
 
 const xml = readFileSync(new URL('./fixtures/synthetic-campaign.xml', import.meta.url), 'utf8');
 
@@ -127,5 +127,38 @@ describe('parseCells against real captured campaigns', () => {
   it('parses both campaigns without warnings', () => {
     expect(parseCells(c584).warnings).toEqual([]);
     expect(parseCells(c987).warnings).toEqual([]);
+  });
+});
+
+describe('parseIdentity', () => {
+  const c584 = readFileSync(new URL('./fixtures/campaign-584-draft.xml', import.meta.url), 'utf8');
+  const c987 = readFileSync(new URL('./fixtures/campaign-987-draft.xml', import.meta.url), 'utf8');
+
+  it('reads the app marker from campaign 584', () => {
+    expect(parseIdentity(c584)).toEqual({
+      appName: 'jordan',
+      funnelId: '584',
+      buildNumber: '1.70.0.989251-sysarch-202608031100',
+    });
+  });
+
+  it('reads the app marker from campaign 987', () => {
+    expect(parseIdentity(c987)).toMatchObject({ appName: 'jordan', funnelId: '987' });
+  });
+
+  it('strips the Java Long suffix from funnelId', () => {
+    // The raw attribute is funnelId="987L".
+    expect(parseIdentity(c987).funnelId).toBe('987');
+  });
+
+  it('returns nulls rather than throwing when the marker is absent', () => {
+    const bare =
+      '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
+    expect(parseIdentity(bare)).toEqual({ appName: null, funnelId: null, buildNumber: null });
+  });
+
+  it('finds the marker even if it moves to another cell', () => {
+    const moved = c987.replace('<mxCell id="0">', '<mxCell id="0"/><mxCell id="99">');
+    expect(parseIdentity(moved).appName).toBe('jordan');
   });
 });

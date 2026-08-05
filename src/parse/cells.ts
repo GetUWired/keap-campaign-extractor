@@ -111,3 +111,47 @@ export function parseCells(draftXml: string): CellInventory {
 
   return { cellCount: cells.length, decisions, styleCounts, warnings };
 }
+
+export interface CampaignIdentity {
+  appName: string | null;
+  funnelId: string | null;
+  buildNumber: string | null;
+}
+
+/**
+ * Reads the self-identifying markers Keap embeds in every campaign.
+ *
+ * Observed on the <Object as="value"> child of mxCell id="0", the graph root:
+ *   <Object initialized="1" funnelId="987L" appName="jordan" buildNumber="..." as="value">
+ *
+ * Searches every cell for the first Object carrying appName rather than
+ * hardcoding cell 0, so the marker moving does not break identification.
+ */
+export function parseIdentity(draftXml: string): CampaignIdentity {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: ATTR,
+    parseAttributeValue: false,
+    isArray: (name) => ['mxCell', 'Object', 'Array'].includes(name),
+  });
+
+  const doc = parser.parse(draftXml) as XmlNode;
+  const model = doc.mxGraphModel as XmlNode | undefined;
+  const root = model?.root as XmlNode | undefined;
+  const empty: CampaignIdentity = { appName: null, funnelId: null, buildNumber: null };
+  if (!root) return empty;
+
+  for (const cell of asArray(root.mxCell)) {
+    for (const value of asArray(cell.Object)) {
+      const appName = attr(value, 'appName');
+      if (appName === undefined) continue;
+      return {
+        appName,
+        funnelId: stripLongSuffix(attr(value, 'funnelId')),
+        buildNumber: attr(value, 'buildNumber') ?? null,
+      };
+    }
+  }
+
+  return empty;
+}
