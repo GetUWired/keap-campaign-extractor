@@ -20,10 +20,18 @@ export interface CellInventory {
 
 const ATTR = '@_';
 
-/** Foreign keys are serialised as Java Longs: "479L" -> "479". */
+/**
+ * Foreign keys are serialised as Java Longs: "479L" -> "479".
+ *
+ * Only digits-then-L qualify. A bare /L$/ strip corrupts any ordinary value
+ * that happens to end in a capital L — decision rules can match literal
+ * strings, so "EMAIL" would silently become "EMAI".
+ */
 export function stripLongSuffix(value: string | undefined | null): string | null {
   if (value === undefined || value === null) return null;
-  return String(value).replace(/L$/, '');
+  const text = String(value);
+  const match = /^(\d+)L$/.exec(text);
+  return match?.[1] ?? text;
 }
 
 /** `~br~` is Keap's line-break token inside name attributes. */

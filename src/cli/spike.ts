@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { closeSession, openSession } from '../auth/session.js';
 import { extractCampaign } from '../extract/campaign.js';
@@ -55,6 +55,9 @@ async function main(): Promise<void> {
   // empty artifacts directory behind.
   const outDir = join('artifacts', args.funnelId);
   const decisionsDir = join(outDir, 'decisions');
+  // Clear prior decision output first. A stale .attempt-N.html from a failed
+  // run sitting beside a successful .html reads as though both happened.
+  await rm(decisionsDir, { recursive: true, force: true });
   await mkdir(decisionsDir, { recursive: true });
 
   let failed = false;

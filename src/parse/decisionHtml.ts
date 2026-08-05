@@ -95,11 +95,21 @@ function idCapture($el: Selection, re: RegExp): string | null {
   return match?.[1] ?? null;
 }
 
+function blankToNull(value: string | undefined | null): string | null {
+  if (value === undefined || value === null) return null;
+  return value.trim() === '' ? null : value;
+}
+
+/**
+ * The response echoes back whatever secondaryKey/secondaryKeyId the request
+ * supplied — it does not derive them. Requested bare, they come back empty, so
+ * blanks are normalised to null rather than stored as "".
+ */
 function readContext($el: Selection): RuleContext {
   return {
-    primaryKey: $el.attr('primarykey') ?? null,
-    secondaryKey: $el.attr('secondarykey') ?? null,
-    secondaryKeyId: stripLongSuffix($el.attr('secondarykeyid')),
+    primaryKey: blankToNull($el.attr('primarykey')),
+    secondaryKey: blankToNull($el.attr('secondarykey')),
+    secondaryKeyId: blankToNull(stripLongSuffix($el.attr('secondarykeyid'))),
   };
 }
 

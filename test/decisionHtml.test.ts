@@ -144,3 +144,59 @@ describe('parseDecisionHtml failure reporting', () => {
     expect(result.warnings.some((w) => /flow header says 3/.test(w))).toBe(true);
   });
 });
+
+describe('parseDecisionHtml against the real campaign 584 decision 13 response', () => {
+  const formDecision = readFileSync(
+    new URL('./fixtures/decision-584-13.html', import.meta.url),
+    'utf8',
+  );
+
+  it('handles a three-branch decision', () => {
+    const result = parseDecisionHtml(formDecision);
+    expect(result.decisionIds).toEqual(['386', '388', '390']);
+    expect(result.wrappers.map((w) => w.flowId)).toEqual(['3', '4', '5']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('keeps raw enum values intact even when the server cannot resolve labels', () => {
+    // Requested without secondaryKey/secondaryKeyId, Keap cannot resolve
+    // display names for form-scoped fields and renders "<enum> (invalid)".
+    // The machine-readable values are unaffected, so routing stays correct.
+    const rule = parseDecisionHtml(formDecision).wrappers[0]?.any[0]?.all[0];
+    expect(rule?.subject).toBe('formSubmission_Subject');
+    expect(rule?.category).toBe('formSubmissionOptions_FieldCategory');
+    expect(rule?.constraint).toBe('selected_Constraint');
+    expect(rule?.field).toBe('formSubmissionOption3780_Field');
+  });
+
+  it('reports the degraded label rather than hiding it', () => {
+    const rule = parseDecisionHtml(formDecision).wrappers[0]?.any[0]?.all[0];
+    expect(rule?.subjectLabel).toContain('(invalid)');
+  });
+
+  it('reads field from a select here, though 987 serves it as a hidden input', () => {
+    const byWrapper = parseDecisionHtml(formDecision).wrappers.map(
+      (w) => w.any[0]?.all[0]?.field,
+    );
+    expect(byWrapper).toEqual([
+      'formSubmissionOption3780_Field',
+      'formSubmissionOption3782_Field',
+      'formSubmissionOption3784_Field',
+    ]);
+  });
+
+  it('captures a literal boolean rule value that has no _text companion', () => {
+    // Form-option rules store `true` in a text input, not an entity id in a
+    // hidden input paired with a label.
+    const rule = parseDecisionHtml(formDecision).wrappers[0]?.any[0]?.all[0];
+    expect(rule?.values).toEqual([{ id: 'true', label: null }]);
+  });
+
+  it('leaves goal context null when the editor was requested without it', () => {
+    expect(parseDecisionHtml(formDecision).wrappers[0]).toMatchObject({
+      primaryKey: 'Marketing',
+      secondaryKey: null,
+      secondaryKeyId: null,
+    });
+  });
+});

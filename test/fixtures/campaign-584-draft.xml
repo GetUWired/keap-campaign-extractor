@@ -1,0 +1,173 @@
+<mxGraphModel>
+  <root>
+    <mxCell id="0">
+      <Object buildNumber="1.70.0.989251-sysarch-202608031100" funnelId="584L" initialized="1" appName="jordan" as="value">
+        <Array as="convertersThatRan">
+          <add value="longIds_purchase"/>
+          <add value="converter_purchase"/>
+          <add value="longIds_bardEmail"/>
+          <add value="longIds_http"/>
+          <add value="longIds_webform"/>
+          <add value="longIds_email"/>
+          <add value="longIds_tag"/>
+          <add value="longIds_task"/>
+          <add value="longIds_decision"/>
+        </Array>
+      </Object>
+    </mxCell>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="2" style="newsletterRequest" parent="1" metaType="webform" vertex="1">
+      <Object deepCopy="0" global="0" initialized="1" name="Satisfaction Survey" published="0" ready="1" webformId="556L" as="value"/>
+      <mxGeometry x="564" y="208" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="3" style="flow" parent="1" collapsed="1" vertex="1">
+      <Object deepCopy="0" flowType="Stop" initialized="1" name="Satisfied" published="0" ready="1" as="value"/>
+      <mxGeometry x="776" y="208" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="14" style="start" parent="3" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Start" published="0" ready="1" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="28" style="edge" parent="3" source="25" target="27" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="18" style="edge" parent="3" source="27" target="17" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="82" style="edge" parent="3" source="14" target="81" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="83" style="edge" parent="3" source="81" target="25" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="81" style="timerDelay" parent="3" vertex="1">
+      <Object initialized="1" name="Wait at least 30 minutes ~br~and then run on a weekday~br~ between 8:00 AM - 5:00~br~PM" published="0" ready="1" runOnType="Weekday" startAmPm="AM" startHour="5" startMinute="0" stopAmPm="PM" stopHour="2" stopMinute="0" timeOfDayType="Between" waitDelay="30" waitDelayType="Minute" as="value"/>
+      <mxGeometry x="192" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="25" style="email" parent="3" vertex="1">
+      <Object deepCopy="0" initialized="1" marketingEmailId="2048L" name="Thank You +~br~Testimonial Request" published="0" ready="1" as="value"/>
+      <mxGeometry x="352" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="27" style="timerDelay" parent="3" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Wait at least 7 days  and~br~then run on a weekday  at~br~8:00 AM" published="0" ready="1" runOnType="Weekday" startAmPm="AM" startHour="5" startMinute="0" timeOfDayType="At" waitDelay="7" waitDelayType="Day" as="value"/>
+      <mxGeometry x="512" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="17" style="email" parent="3" vertex="1">
+      <Object deepCopy="0" initialized="1" marketingEmailId="2050L" name="Ask For Referral" published="0" ready="1" as="value"/>
+      <mxGeometry x="672" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="4" style="flow" parent="1" collapsed="1" vertex="1">
+      <Object deepCopy="0" flowType="Stop" initialized="1" name="Neutral" published="0" ready="1" as="value"/>
+      <mxGeometry x="772" y="304" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="15" style="start" parent="4" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Start" published="0" ready="1" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="20" style="edge" parent="4" source="35" target="7" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="35" style="timerDelay" parent="4" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Wait at least 30 minutes ~br~and then run on a weekday~br~ between 8:00 AM - 5:00~br~PM" published="0" ready="1" runOnType="Weekday" startAmPm="AM" startHour="5" startMinute="0" stopAmPm="PM" stopHour="2" stopMinute="0" timeOfDayType="Between" waitDelay="30" waitDelayType="Minute" as="value"/>
+      <mxGeometry x="192" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="7" style="email" parent="4" vertex="1">
+      <Object deepCopy="0" initialized="1" marketingEmailId="2052L" name="How did we fail ~br~to meet your ~br~expectations?" published="0" ready="1" as="value"/>
+      <mxGeometry x="352" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="84" style="edge" parent="4" source="15" target="35" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="5" style="flow" parent="1" collapsed="1" vertex="1">
+      <Object deepCopy="0" flowType="Stop" initialized="1" name="Not Satisfied" published="0" ready="1" as="value"/>
+      <mxGeometry x="772" y="400" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="16" style="start" parent="5" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Start" published="0" ready="1" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="19" style="task" parent="5" vertex="1">
+      <Object deepCopy="0" initialized="1" name="Not Satisfied Follow-Up" published="0" ready="0" taskAssignToBackup="0L" taskAssignToOwner="1" taskBody=" They submitted the satisfaction survey and were not satisfied with their recent purchase. Call ~Contact.FirstName~ ~Contact.LastName~ at~Contact.Phone1~ or email them at ~Contact.Email~ and reach out to see if there is anything we can do to make their experience better." taskDaysTillDue="0" taskDueAt="17:00" taskNotifyOwner="0" taskPriority="2" taskReminder="0" taskTitle="Not Satisfied Call/Email - ~Contact.FirstName~ ~Contact.LastName~" taskType="Call" as="value"/>
+      <mxGeometry x="192" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="85" style="edge" parent="5" source="16" target="19" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="13" style="decision" parent="1" vertex="1">
+      <Object deepCopy="0" initialized="1" published="0" ready="1" as="value">
+        <Array as="decisions">
+          <Object decisionId="386L" flowId="3"/>
+          <Object decisionId="388L" flowId="4"/>
+          <Object decisionId="390L" flowId="5"/>
+        </Array>
+      </Object>
+      <mxGeometry x="660" y="224" width="32" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="31" style="edge" parent="1" source="2" target="13" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="32" style="edge" parent="1" source="13" target="3" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="33" style="edge" parent="1" source="13" target="4" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="34" style="edge" parent="1" source="13" target="5" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="78" style="notes" parent="1" vertex="1">
+      <Object deepCopy="0" notes="&lt;h3&gt; Satisfaction Survey Campaign Overview &lt;/h3&gt;This campaign contains a one-question survey that will capture the satisfaction level of your customers. Then, automate your follow up based on their level of satisfaction." published="0" as="value"/>
+      <mxGeometry x="384" y="32" width="480" height="128" as="geometry"/>
+    </mxCell>
+    <mxCell id="86" style="purchaseSuccess" parent="1" metaType="purchase" vertex="1">
+      <Object broken="0" eventId="15" global="1" initialized="1" name="Made A Purchase" published="0" purchaseId="1279L" purchaseOption="15" purchaseType="product" ready="1" as="value"/>
+      <mxGeometry x="160" y="208" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="87" style="flow" parent="1" collapsed="1" vertex="1">
+      <Object flowType="Stop" initialized="1" name="Untitled Sequence" published="0" as="value"/>
+      <mxGeometry x="320" y="208" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="90" style="start" parent="87" vertex="1">
+      <Object broken="0" initialized="1" name="Start" published="0" ready="1" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="91" style="timerDelay" parent="87" vertex="1">
+      <Object broken="0" initialized="1" name="Wait at least 30 days and~br~then run on a weekday at~br~8:00 AM" published="0" ready="1" runOnType="Weekday" startAmPm="AM" startHour="5" startMinute="0" timeOfDayType="At" waitDelay="30" waitDelayType="Day" as="value"/>
+      <mxGeometry x="224" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="92" style="edge" parent="87" source="90" target="91" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="93" style="bardEmail" parent="87" vertex="1">
+      <Object initialized="1" marketingEmailId="2054L" name="Untitled Email (beta)" published="0" as="value"/>
+      <mxGeometry x="384" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="94" style="edge" parent="87" source="91" target="93" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="96" style="edge" parent="87" source="93" target="95" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="98" style="edge" parent="87" source="95" target="97" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="95" style="timerDelay" parent="87" vertex="1">
+      <Object broken="0" initialized="1" name="Wait at least 3 days and~br~then run on a weekday at~br~8:00 AM" published="0" ready="1" runOnType="Weekday" startAmPm="AM" startHour="5" startMinute="0" timeOfDayType="At" waitDelay="3" waitDelayType="Day" as="value"/>
+      <mxGeometry x="544" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="97" style="bardEmail" parent="87" vertex="1">
+      <Object name="Untitled Email (beta)" as="value"/>
+      <mxGeometry x="736" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="88" style="edge" parent="1" source="86" target="87" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="89" style="edge" parent="1" source="87" target="2" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="99" style="newsletterRequest" parent="1" metaType="webform" vertex="1">
+      <Object global="1" initialized="1" name="test" published="0" webformId="558L" as="value"/>
+      <mxGeometry x="256" y="576" width="64" height="64" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>
