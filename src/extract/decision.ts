@@ -22,24 +22,52 @@ export interface DecisionFetchResult {
 }
 
 /**
- * The decision-editor URL shape is INFERRED, not observed. The handoff
- * captured the configureCell pattern for a timerDelay cell only, so these
- * candidates are tried in order and validated by content.
+ * The goal a decision hangs off. Observed as secondaryKey=WebForm,
+ * secondaryKeyId=681L, where 681 is the webformId of the upstream
+ * newsletterRequest goal.
  */
-export function decisionCandidateUrls(cell: DecisionCell, nowMs: number): string[] {
-  const base = `${BASE_URL}/app/funnel/configureCell`;
-  const stamp = String(nowMs);
-  const common = `cellId=${encodeURIComponent(cell.cellId)}&metaType=decision`;
-  const title = encodeURIComponent(cell.name ?? '');
-
-  return [
-    `${base}?${common}&title=${title}&timestamp=${stamp}&_=${stamp}`,
-    `${base}?${common}&timestamp=${stamp}&_=${stamp}`,
-    `${base}?${common}&includePage=true&timestamp=${stamp}&_=${stamp}`,
-  ];
+export interface GoalContext {
+  secondaryKey: string;
+  secondaryKeyId: string;
 }
 
-/** Status alone is not trusted: the app can return 200 with an error shell. */
+/**
+ * Builds candidate URLs for the decision editor.
+ *
+ * The endpoint is /app/decisionFunnel/decisionEditor — confirmed by observing a
+ * real decision-diamond click, not inferred. It is keyed by the branch lists
+ * rather than by cell id, and decisionIds keep their Java-Long `L` suffix.
+ *
+ * Whether secondaryKey/secondaryKeyId are required is still unconfirmed: they
+ * plausibly only select the field vocabulary offered in the editor, since the
+ * saved rules are keyed server-side by decisionId. The bare form is therefore
+ * tried first, and the response itself carries the goal context back (see
+ * DecisionWrapper), so a hit on the bare form means we never have to trace the
+ * upstream goal at all.
+ */
+export function decisionCandidateUrls(cell: DecisionCell, context?: GoalContext): string[] {
+  const base = `${BASE_URL}/app/decisionFunnel/decisionEditor`;
+  const flowIds = cell.branches.map((b) => b.flowId).join(',');
+  // parseCells strips the L suffix; the live URL carries it, so restore it.
+  const decisionIds = cell.branches.map((b) => `${b.decisionId}L`).join(',');
+  const core = `flowIds=${encodeURIComponent(flowIds)}&decisionIds=${encodeURIComponent(decisionIds)}`;
+
+  const urls = [`${base}?${core}`];
+
+  if (context) {
+    const secondaryKeyId = context.secondaryKeyId.endsWith('L')
+      ? context.secondaryKeyId
+      : `${context.secondaryKeyId}L`;
+    urls.push(
+      `${base}?${core}&secondaryKey=${encodeURIComponent(context.secondaryKey)}` +
+        `&secondaryKeyId=${encodeURIComponent(secondaryKeyId)}`,
+    );
+  }
+
+  return urls;
+}
+
+/** Status alone is not trusted: the app can return 200 with an empty modal shell. */
 export function isDecisionHtml(body: string): boolean {
   return /decisionComponents|decisionIds/.test(body);
 }
@@ -47,12 +75,22 @@ export function isDecisionHtml(body: string): boolean {
 export async function fetchDecision(
   context: BrowserContext,
   cell: DecisionCell,
-  nowMs: number = Date.now(),
+  goal?: GoalContext,
 ): Promise<DecisionFetchResult> {
   const attempts: DecisionFetchAttempt[] = [];
   const missBodies: string[] = [];
 
-  for (const url of decisionCandidateUrls(cell, nowMs)) {
+  if (cell.branches.length === 0) {
+    return {
+      cellId: cell.cellId,
+      attempts,
+      html: null,
+      criteria: null,
+      missBodies: [],
+    };
+  }
+
+  for (const url of decisionCandidateUrls(cell, goal)) {
     const response = await safeGet(context, url);
     const body = await response.text();
     const hit = isDecisionHtml(body);

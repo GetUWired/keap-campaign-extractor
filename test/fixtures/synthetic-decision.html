@@ -1,91 +1,185 @@
-<div id="pagecontent">
-  <div id="editor" data-funnelname="Beta Application" data-maxcellid="99"
-       data-newtimezoneid="America/Phoenix" data-timezonelabel="(GMT -07:00) Phoenix">
-    <div id="hotSwappableEditor_2">
-      <div id="wrapper_decisionComponents" class="whole-page-editor-wrapper">
-        <div id="decisionComponents">
-          <input type="hidden" id="decisionIds" name="decisionIds" value="479,481"/>
-          <input type="hidden" id="flowIds" name="flowIds" value="3,32"/>
+<!--
+  Synthetic decision editor HTML — edge cases the real capture does not exercise.
 
-          <section class="decisionWrapper">
-            <div class="ruleGroupOuter_1">
-              <div class="ruleGroupInner_1">
-                <table class="ruleContainer_100">
-                  <tr><td>
-                    <div class="rule_100">
-                      <select name="subject_100">
-                        <option value="_blank">Choose</option>
-                        <option value="contact_Subject" selected="selected">Contact's</option>
-                      </select>
-                      <select name="category_100">
-                        <option value="_blank">Choose</option>
-                        <option value="tags_FieldCategory" selected="selected">Tags</option>
-                      </select>
-                      <input type="text" name="field_100" value=""/>
-                      <select name="constraint_100">
-                        <option value="contains_Constraint">contains</option>
-                        <option value="notContains_Constraint" selected="selected">doesn't contain</option>
-                      </select>
-                      <input type="hidden" name="value_100_1" value="1123L"/>
-                      <input type="text" name="value_100_1_text"
-                             value="WooConnection Beta -&gt; WooCommerce Beta Tester - Applied"/>
-                      <input type="hidden" name="value_100_2" value="1145L"/>
-                      <input type="text" name="value_100_2_text" value="Beta -&gt; Second Tag"/>
-                    </div>
-                  </td></tr>
-                </table>
-              </div>
+  Structure mirrors decision-987-34.html exactly: the numbers live on `id`, the
+  `class` carries no suffix, field_* has an id but no name, and the else select
+  marks its choice with a `value` attribute rather than a selected option.
+
+  Covers, in order:
+    wrapper 0 — one rule with TWO values (multi-select)
+    wrapper 1 — TWO rules in one inner group (AND), second rule has a populated
+                field and no values
+    wrapper 2 — TWO outer groups (OR of two AND groups)
+
+  All ids and labels are invented. No tenant data.
+-->
+<div id="wrapper_decisionComponents" class="whole-page-editor-wrapper">
+  <div id="decisionComponents">
+    <input type="hidden" id="flowIds" value="[3, 32, 40]"/>
+    <input type="hidden" id="decisionIds" value="[479, 481, 490]"/>
+
+    <section class="decisionWrapper">
+      <div class="flowHeader">
+        <div class="rule-menu">
+          <div class="rule-menu-button" id="rule_menu_button_off_10"></div>
+          <div class="rule-menu-popup hidden" id="rule_menu_popup_10">
+            <div class="rule-menu-item" id="rule_delete_rules_menu_item_10">
+              <span class="rule-menu-item-content">Delete all rules</span>
             </div>
-          </section>
-
-          <section class="decisionWrapper">
-            <div class="ruleGroupOuter_2">
-              <div class="ruleGroupInner_2">
-                <table class="ruleContainer_200">
-                  <tr><td>
-                    <div class="rule_200">
-                      <select name="subject_200">
-                        <option value="contact_Subject" selected="selected">Contact's</option>
-                      </select>
-                      <select name="category_200">
-                        <option value="tags_FieldCategory" selected="selected">Tags</option>
-                      </select>
-                      <input type="text" name="field_200" value=""/>
-                      <select name="constraint_200">
-                        <option value="contains_Constraint" selected="selected">contains</option>
-                      </select>
-                      <input type="hidden" name="value_200_1" value="1123L"/>
-                      <input type="text" name="value_200_1_text"
-                             value="WooConnection Beta -&gt; WooCommerce Beta Tester - Applied"/>
-                    </div>
-                  </td></tr>
-                </table>
-                <table class="ruleContainer_201">
-                  <tr><td>
-                    <div class="rule_201">
-                      <select name="subject_201">
-                        <option value="contact_Subject" selected="selected">Contact's</option>
-                      </select>
-                      <select name="category_201">
-                        <option value="customFieldGroup29_FieldCategory" selected="selected">Info</option>
-                      </select>
-                      <input type="text" name="field_201" value="Region"/>
-                      <select name="constraint_201">
-                        <option value="notEmpty_Constraint" selected="selected">is not empty</option>
-                      </select>
-                    </div>
-                  </td></tr>
-                </table>
-              </div>
-            </div>
-          </section>
-
-          <select id="elseRulesOptions" name="elseRulesOptions">
-            <option value="0" selected="selected">Don't put them in a sequence</option>
-            <option value="481">32</option>
-            <option value="479">3</option>
-          </select>
+          </div>
         </div>
+        <div class="rule-header">Rules for:&nbsp;<span id="flow_3"></span></div>
+      </div>
+      <div id="ruleGroupOuter_10" class="ruleGroupOuter"
+           primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+        <div id="ruleGroupInner_11" class="ruleGroupInner"
+             primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+          <table id="ruleContainer_100" class="ruleContainer">
+            <tr><td>
+              <div id="rule_100" class="rule"
+                   primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+                <select id="subject_100" name="subject_100">
+                  <option value="_blank"/>
+                  <option selected="selected" value="contact_Subject">Contact's</option>
+                </select>
+                <select id="category_100" name="category_100">
+                  <option value="_blank"/>
+                  <option selected="selected" value="tags_FieldCategory">Tags</option>
+                </select>
+                <input id="field_100" type="hidden" value="tags_Field"/>
+                <select id="constraint_100" name="constraint_100">
+                  <option value="contains_Constraint">contains</option>
+                  <option selected="selected" value="notContains_Constraint">doesn't contain</option>
+                </select>
+                <div id="ruleValues_100" class="ruleValues">
+                  <div id="ruleValueContainer_200" class="ruleValueContainer">
+                    <div id="ruleValue_200" class="ruleValue">
+                      <input id="value_100_200" name="value_100_200" type="hidden" value="9001L"/>
+                      <input id="value_100_200_text" name="value_100_200_text" type="text"
+                             value="Example Category -&gt; First Tag"/>
+                    </div>
+                  </div>
+                  <div id="ruleValueContainer_201" class="ruleValueContainer">
+                    <div id="ruleValue_201" class="ruleValue">
+                      <input id="value_100_201" name="value_100_201" type="hidden" value="9002L"/>
+                      <input id="value_100_201_text" name="value_100_201_text" type="text"
+                             value="Example Category -&gt; Second Tag"/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="decisionWrapper">
+      <div class="flowHeader">
+        <div class="rule-header">Rules for:&nbsp;<span id="flow_32"></span></div>
+      </div>
+      <div id="ruleGroupOuter_20" class="ruleGroupOuter"
+           primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+        <div id="ruleGroupInner_21" class="ruleGroupInner"
+             primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+          <table id="ruleContainer_200" class="ruleContainer">
+            <tr><td>
+              <div id="rule_200" class="rule">
+                <select id="subject_200" name="subject_200">
+                  <option selected="selected" value="contact_Subject">Contact's</option>
+                </select>
+                <select id="category_200" name="category_200">
+                  <option selected="selected" value="tags_FieldCategory">Tags</option>
+                </select>
+                <input id="field_200" type="hidden" value="tags_Field"/>
+                <select id="constraint_200" name="constraint_200">
+                  <option selected="selected" value="contains_Constraint">contains</option>
+                </select>
+                <div id="ruleValues_200" class="ruleValues">
+                  <div id="ruleValueContainer_210" class="ruleValueContainer">
+                    <div id="ruleValue_210" class="ruleValue">
+                      <input id="value_200_210" name="value_200_210" type="hidden" value="9001L"/>
+                      <input id="value_200_210_text" name="value_200_210_text" type="text"
+                             value="Example Category -&gt; First Tag"/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </td></tr>
+          </table>
+          <table id="ruleContainer_201" class="ruleContainer">
+            <tr><td>
+              <div id="rule_201" class="rule">
+                <select id="subject_201" name="subject_201">
+                  <option selected="selected" value="contact_Subject">Contact's</option>
+                </select>
+                <select id="category_201" name="category_201">
+                  <option selected="selected" value="customFieldGroup29_FieldCategory">Info</option>
+                </select>
+                <input id="field_201" type="hidden" value="Region"/>
+                <select id="constraint_201" name="constraint_201">
+                  <option selected="selected" value="notEmpty_Constraint">is not empty</option>
+                </select>
+              </div>
+            </td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="decisionWrapper">
+      <div class="flowHeader">
+        <div class="rule-header">Rules for:&nbsp;<span id="flow_40"></span></div>
+      </div>
+      <div id="ruleGroupOuter_30" class="ruleGroupOuter"
+           primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+        <div id="ruleGroupInner_31" class="ruleGroupInner">
+          <table id="ruleContainer_300" class="ruleContainer">
+            <tr><td>
+              <div id="rule_300" class="rule">
+                <select id="subject_300" name="subject_300">
+                  <option selected="selected" value="contact_Subject">Contact's</option>
+                </select>
+                <select id="category_300" name="category_300">
+                  <option selected="selected" value="tags_FieldCategory">Tags</option>
+                </select>
+                <input id="field_300" type="hidden" value="tags_Field"/>
+                <select id="constraint_300" name="constraint_300">
+                  <option selected="selected" value="isEmpty_Constraint">is empty</option>
+                </select>
+              </div>
+            </td></tr>
+          </table>
+        </div>
+        <div class="ruleGroupComparisonWrapper"><div class="ruleGroupComparison">Or</div></div>
+        <div id="ruleGroupInner_32" class="ruleGroupInner">
+          <table id="ruleContainer_301" class="ruleContainer">
+            <tr><td>
+              <div id="rule_301" class="rule">
+                <select id="subject_301" name="subject_301">
+                  <option selected="selected" value="contact_Subject">Contact's</option>
+                </select>
+                <select id="category_301" name="category_301">
+                  <option selected="selected" value="tags_FieldCategory">Tags</option>
+                </select>
+                <input id="field_301" type="hidden" value="tags_Field"/>
+                <select id="constraint_301" name="constraint_301">
+                  <option selected="selected" value="notEmpty_Constraint">is not empty</option>
+                </select>
+              </div>
+            </td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <div id="elseRule">
+      <div class="custom-select">
+        <select id="elseRulesOptions" value="481">
+          <option id="noSequenceRule" value="0">Don't put them in a sequence</option>
+          <option value="481">32</option>
+          <option value="479">3</option>
+        </select>
       </div>
     </div>
   </div>

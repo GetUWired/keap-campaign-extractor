@@ -1,0 +1,204 @@
+<!--
+  Real /app/decisionFunnel/decisionEditor response, campaign 987 decision cell 34.
+  Captured 2026-08-04 from jordan.infusionsoft.com, app build 1.70.0.989251-sysarch-202608031100.
+
+  Request:
+    GET /app/decisionFunnel/decisionEditor
+        ?flowIds=3,32&decisionIds=479L,481L&secondaryKey=WebForm&secondaryKeyId=681L
+
+  Verbatim except that <script>, <link> and <style> blocks were removed: the parser
+  never reads them, and inline script text must not be stored (handoff section 7,
+  gotcha 4 — session tokens sit adjacent to it).
+
+  The rule_menu_* divs are deliberately retained. Their ids begin with "rule_", so a
+  naive /^rule_(.+)$/ id match treats them as rules. They are the regression case for
+  requiring digits: /^rule_(\d+)$/.
+-->
+<div id="wrapper_decisionComponents" class="whole-page-editor-wrapper">
+    <div id="decisionComponents" >
+        <input type="hidden" id="flowIds" value="[3, 32]"/>
+    <input type="hidden" id="decisionIds" value="[479, 481]"/>
+    <section class="decisionWrapper">
+            <div class="flowHeader">
+                    <div class="rule-menu">
+                        <div class="rule-menu-button" id="rule_menu_button_off_1499">
+                            <img src="/resources/svg/ic-ellipsis.svg" width="40" height="40" />
+                        </div>
+                        <div class="rule-menu-button pressed hidden" id="rule_menu_button_on_1499">
+                            <img src="/resources/svg/ic-ellipsis.svg" width="40" height="40" />
+                        </div>
+                        <div class="rule-menu-popup hidden" id="rule_menu_popup_1499">
+                            <div class="rule-menu-item" id="rule_import_rules_menu_item_1499">
+                                <img src="/resources/svg/arrow-long-right.svg" width="24" height="24" />
+                                <span class="rule-menu-item-content">Import rules from…</span>
+                            </div>
+                            <div class="rule-menu-item" id="rule_delete_rules_menu_item_1499">
+                                <img src="/resources/svg/ic-trash.svg" width="24" height="24" />
+                                <span class="rule-menu-item-content">Delete all rules</span>
+                            </div>
+                        </div>
+                    </div>
+                <div class="rule-header">
+                    Rules for:&nbsp;<span id="flow_3"></span>
+                </div>
+                <p>
+                    What rules must a contact meet to be allowed into this sequence?</p>
+            </div>
+            <div id="ruleGroupOuter_1499" class="ruleGroupOuter"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681"
+        msgCodeTitle="funnel.edit.decision.default.title" msgCodeSubtitle="funnel.edit.decision.default.subtitle">
+<div id="ruleGroupInner_1507" class="ruleGroupInner"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<table id="ruleContainer_561" class="ruleContainer" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                    <td width="98%">
+                        <span class="rulePrefix">If the</span>
+                        <div id="rule_561" class="rule"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="subject_561" name="subject_561" data-on="Component.Select"><option value="_blank" /><option selected="selected" value="contact_Subject">Contact's</option></select><input id="subject_561-hiddenWidth" name="subject_561-hiddenWidth" type="hidden" value="" /><select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="category_561" name="category_561" data-on="Component.Select"><option value="_blank" /><option selected="selected" value="tags_FieldCategory">Tags</option><option value="contact.contactFields_FieldCategory">Contact Fields</option><option value="customFieldGroup29_FieldCategory">Info</option><option value="customFieldGroup1_FieldCategory">Header</option><option value="customFieldGroup7_FieldCategory">Question 3</option><option value="customFieldGroup31_FieldCategory">Custom Fields</option><option value="customFieldGroup10_FieldCategory">Referral Source</option><option value="customFieldGroup16_FieldCategory">Employer</option></select><input id="category_561-hiddenWidth" name="category_561-hiddenWidth" type="hidden" value="" /><input id="field_561" type="hidden" value="tags_Field" /><select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="constraint_561" name="constraint_561" data-on="Component.Select"><option value="_blank" /><option value="contains_Constraint">contains</option><option selected="selected" value="notContains_Constraint">doesn't contain</option><option value="isEmpty_Constraint">is empty</option><option value="notEmpty_Constraint">is not empty</option></select><input id="constraint_561-hiddenWidth" name="constraint_561-hiddenWidth" type="hidden" value="" /><div id="ruleValues_561" class="ruleValues"
+         primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<div id="ruleValueContainer_647" class="ruleValueContainer">
+            <div id="ruleValue_647" class="ruleValue" allowDelete="true"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<div id="ruleValueValue_647" class="search-choice ruleValueValue">
+            <div id="showRuleValue_647" class="showRuleValue"></div>
+            <a id="deleteRuleValue_647" href="javascript:void(0)" class="search-choice-close deleteRuleValue"></a>
+            </div>
+    <div id="editRuleValue_647" class="editRuleValue">
+        <input id="value_561_647" name="value_561_647" type="hidden" value="1123L" /><div id="value_561_647_text_menu" style="display: inline-block; position: relative;">
+        <input data-defaultValue="0" data-limit="200" data-searchText="Type to search..." data-strategy="tag" class="autocomplete" id="value_561_647_text" name="value_561_647_text" size="20" type="text" value="WooConnection Beta -&gt; WooCommerce Beta Tester - Applied" autocomplete="off" placeholder="Type to search..." /></div>
+        </div>
+</div>
+<div id="ruleValue_placeholder_647" class="ruleValuePlaceholder">&nbsp;</div>
+                <div id="addRuleValue_or_647" class="addRuleValue">+ or</div>
+                <div id="addRuleValue_and_647" class="addRuleValue">+ and</div>
+                </div>
+    </div>
+</div>
+</td>
+                    <td width="1%" align="right">
+                        <div id="duplicateRule_561" class="ruleButton">
+                            <img src="/resources/svg/duplicate.svg" width="32" height="32" />
+                            <div class="buttonTooltip">
+                                <span>Copy rule</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td width="1%" align="right">
+                        <div id="deleteRule_561" class="ruleButton">
+                            <img src="/resources/svg/trashbin.svg" width="32" height="32" />
+                            <div class="buttonTooltip">
+                                <span>Delete rule</span>
+                            </div>
+                        </div>
+                    </td>
+            </tr>
+        </table>
+        <div id="addRule_1507" class="addRuleButton">+ And</div>
+</div>
+<div class="ruleGroupComparisonWrapper"><div class="ruleGroupComparison">Or</div></div>
+    <div id="addRuleGroup_1499" class="addRuleGroupButton">
+        <img src="/resources/svg/ic-add-circle.svg" alt="Add a rule" width="24" height="24">
+        <span>Add a rule</span>
+    </div>
+
+    </div>
+</section>
+    <section class="decisionWrapper">
+            <div class="flowHeader">
+                    <div class="rule-menu">
+                        <div class="rule-menu-button" id="rule_menu_button_off_1503">
+                            <img src="/resources/svg/ic-ellipsis.svg" width="40" height="40" />
+                        </div>
+                        <div class="rule-menu-button pressed hidden" id="rule_menu_button_on_1503">
+                            <img src="/resources/svg/ic-ellipsis.svg" width="40" height="40" />
+                        </div>
+                        <div class="rule-menu-popup hidden" id="rule_menu_popup_1503">
+                            <div class="rule-menu-item" id="rule_import_rules_menu_item_1503">
+                                <img src="/resources/svg/arrow-long-right.svg" width="24" height="24" />
+                                <span class="rule-menu-item-content">Import rules from…</span>
+                            </div>
+                            <div class="rule-menu-item" id="rule_delete_rules_menu_item_1503">
+                                <img src="/resources/svg/ic-trash.svg" width="24" height="24" />
+                                <span class="rule-menu-item-content">Delete all rules</span>
+                            </div>
+                        </div>
+                    </div>
+                <div class="rule-header">
+                    Rules for:&nbsp;<span id="flow_32"></span>
+                </div>
+                <p>
+                    What rules must a contact meet to be allowed into this sequence?</p>
+            </div>
+            <div id="ruleGroupOuter_1503" class="ruleGroupOuter"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681"
+        msgCodeTitle="funnel.edit.decision.default.title" msgCodeSubtitle="funnel.edit.decision.default.subtitle">
+<div id="ruleGroupInner_1509" class="ruleGroupInner"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<table id="ruleContainer_563" class="ruleContainer" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                    <td width="98%">
+                        <span class="rulePrefix">If the</span>
+                        <div id="rule_563" class="rule"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="subject_563" name="subject_563" data-on="Component.Select"><option value="_blank" /><option selected="selected" value="contact_Subject">Contact's</option></select><input id="subject_563-hiddenWidth" name="subject_563-hiddenWidth" type="hidden" value="" /><select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="category_563" name="category_563" data-on="Component.Select"><option value="_blank" /><option selected="selected" value="tags_FieldCategory">Tags</option><option value="contact.contactFields_FieldCategory">Contact Fields</option><option value="customFieldGroup29_FieldCategory">Info</option><option value="customFieldGroup1_FieldCategory">Header</option><option value="customFieldGroup7_FieldCategory">Question 3</option><option value="customFieldGroup31_FieldCategory">Custom Fields</option><option value="customFieldGroup10_FieldCategory">Referral Source</option><option value="customFieldGroup16_FieldCategory">Employer</option></select><input id="category_563-hiddenWidth" name="category_563-hiddenWidth" type="hidden" value="" /><input id="field_563" type="hidden" value="tags_Field" /><select allowSingleDeselect="true" data-placeholder="Please select..." displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="constraint_563" name="constraint_563" data-on="Component.Select"><option value="_blank" /><option selected="selected" value="contains_Constraint">contains</option><option value="notContains_Constraint">doesn't contain</option><option value="isEmpty_Constraint">is empty</option><option value="notEmpty_Constraint">is not empty</option></select><input id="constraint_563-hiddenWidth" name="constraint_563-hiddenWidth" type="hidden" value="" /><div id="ruleValues_563" class="ruleValues"
+         primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<div id="ruleValueContainer_649" class="ruleValueContainer">
+            <div id="ruleValue_649" class="ruleValue" allowDelete="true"
+        primaryKey="Marketing" secondaryKey="WebForm" secondaryKeyId="681">
+<div id="ruleValueValue_649" class="search-choice ruleValueValue">
+            <div id="showRuleValue_649" class="showRuleValue"></div>
+            <a id="deleteRuleValue_649" href="javascript:void(0)" class="search-choice-close deleteRuleValue"></a>
+            </div>
+    <div id="editRuleValue_649" class="editRuleValue">
+        <input id="value_563_649" name="value_563_649" type="hidden" value="1123L" /><div id="value_563_649_text_menu" style="display: inline-block; position: relative;">
+        <input data-defaultValue="0" data-limit="200" data-searchText="Type to search..." data-strategy="tag" class="autocomplete" id="value_563_649_text" name="value_563_649_text" size="20" type="text" value="WooConnection Beta -&gt; WooCommerce Beta Tester - Applied" autocomplete="off" placeholder="Type to search..." /></div>
+        </div>
+</div>
+<div id="ruleValue_placeholder_649" class="ruleValuePlaceholder">&nbsp;</div>
+                <div id="addRuleValue_or_649" class="addRuleValue">+ or</div>
+                <div id="addRuleValue_and_649" class="addRuleValue">+ and</div>
+                </div>
+    </div>
+</div>
+</td>
+                    <td width="1%" align="right">
+                        <div id="duplicateRule_563" class="ruleButton">
+                            <img src="/resources/svg/duplicate.svg" width="32" height="32" />
+                            <div class="buttonTooltip">
+                                <span>Copy rule</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td width="1%" align="right">
+                        <div id="deleteRule_563" class="ruleButton">
+                            <img src="/resources/svg/trashbin.svg" width="32" height="32" />
+                            <div class="buttonTooltip">
+                                <span>Delete rule</span>
+                            </div>
+                        </div>
+                    </td>
+            </tr>
+        </table>
+        <div id="addRule_1509" class="addRuleButton">+ And</div>
+</div>
+<div class="ruleGroupComparisonWrapper"><div class="ruleGroupComparison">Or</div></div>
+    <div id="addRuleGroup_1503" class="addRuleGroupButton">
+        <img src="/resources/svg/ic-add-circle.svg" alt="Add a rule" width="24" height="24">
+        <span>Add a rule</span>
+    </div>
+
+    </div>
+</section>
+    <div id="elseRule">
+        <p>If contacts don’t meet any of the rules defined above where do you want them to go?</p>
+        <div class="custom-select">
+            <select id="elseRulesOptions" value="0">
+                <option id ='noSequenceRule' value="0">Don’t put them in a sequence</option>
+                <option value="481">32</option>
+                <option value="479">3</option>
+                </select>
+        </div>
+    </div>
+    </div>
+</div>
