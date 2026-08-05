@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page } from 'playwright';
 import { assertAuthenticated } from '../auth/session.js';
-import { BASE_URL } from '../config.js';
 
 export interface CampaignRaw {
   funnelId: string;
@@ -18,8 +17,12 @@ export interface CampaignRaw {
 
 const EDITOR_TIMEOUT_MS = 30_000;
 
-export async function extractCampaign(page: Page, funnelId: string): Promise<CampaignRaw> {
-  const url = `${BASE_URL}/app/funnel/funnelEditor?funnelId=${encodeURIComponent(funnelId)}`;
+export async function extractCampaign(
+  page: Page,
+  baseUrl: string,
+  funnelId: string,
+): Promise<CampaignRaw> {
+  const url = `${baseUrl}/app/funnel/funnelEditor?funnelId=${encodeURIComponent(funnelId)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   assertAuthenticated(page);
 

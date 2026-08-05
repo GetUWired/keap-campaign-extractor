@@ -1,5 +1,4 @@
 import type { BrowserContext } from 'playwright';
-import { BASE_URL } from '../config.js';
 import { safeGet } from '../guard/readonly.js';
 import type { DecisionCell } from '../parse/cells.js';
 import { type DecisionCriteria, parseDecisionHtml } from '../parse/decisionHtml.js';
@@ -45,8 +44,12 @@ export interface GoalContext {
  * DecisionWrapper), so a hit on the bare form means we never have to trace the
  * upstream goal at all.
  */
-export function decisionCandidateUrls(cell: DecisionCell, context?: GoalContext): string[] {
-  const base = `${BASE_URL}/app/decisionFunnel/decisionEditor`;
+export function decisionCandidateUrls(
+  baseUrl: string,
+  cell: DecisionCell,
+  context?: GoalContext,
+): string[] {
+  const base = `${baseUrl}/app/decisionFunnel/decisionEditor`;
   const flowIds = cell.branches.map((b) => b.flowId).join(',');
   // parseCells strips the L suffix; the live URL carries it, so restore it.
   const decisionIds = cell.branches.map((b) => `${b.decisionId}L`).join(',');
@@ -74,6 +77,7 @@ export function isDecisionHtml(body: string): boolean {
 
 export async function fetchDecision(
   context: BrowserContext,
+  baseUrl: string,
   cell: DecisionCell,
   goal?: GoalContext,
 ): Promise<DecisionFetchResult> {
@@ -90,7 +94,7 @@ export async function fetchDecision(
     };
   }
 
-  for (const url of decisionCandidateUrls(cell, goal)) {
+  for (const url of decisionCandidateUrls(baseUrl, cell, goal)) {
     const response = await safeGet(context, url);
     const body = await response.text();
     const hit = isDecisionHtml(body);
