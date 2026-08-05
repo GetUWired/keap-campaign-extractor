@@ -1,29 +1,42 @@
 import { existsSync } from 'node:fs';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
-import { LOGIN_URL_PATTERN, STATE_PATH } from '../config.js';
+import { baseUrlFor, normalizeAppName, sessionPathFor } from '../app.js';
+import { LOGIN_URL_PATTERN } from '../config.js';
 import { type Guard, installReadOnlyGuard } from '../guard/readonly.js';
 
 export interface Session {
+  app: string;
+  baseUrl: string;
   browser: Browser;
   context: BrowserContext;
   guard: Guard;
 }
 
 /**
- * Opens a browser context restored from the human-established session, with
- * the read-only guard always installed. This is the only entry point
+ * Opens a browser context restored from the human-established session for one
+ * app, with the read-only guard always installed. This is the only entry point
  * extraction code may use.
+ *
+ * The app name is validated here as well as at the CLI boundary, so no caller
+ * can reach the filesystem or the network with an unchecked value.
  */
-export async function openSession(options?: { headless?: boolean }): Promise<Session> {
-  if (!existsSync(STATE_PATH)) {
-    throw new Error(`No session file at ${STATE_PATH}. Run:  npm run login`);
+export async function openSession(options: {
+  app: string;
+  headless?: boolean;
+}): Promise<Session> {
+  const app = normalizeAppName(options.app);
+  const baseUrl = baseUrlFor(app);
+  const statePath = sessionPathFor(app);
+
+  if (!existsSync(statePath)) {
+    throw new Error(`No session for "${app}" at ${statePath}. Run:  npm run login -- --app ${app}`);
   }
 
-  const browser = await chromium.launch({ headless: options?.headless ?? true });
-  const context = await browser.newContext({ storageState: STATE_PATH });
+  const browser = await chromium.launch({ headless: options.headless ?? true });
+  const context = await browser.newContext({ storageState: statePath });
   const guard = installReadOnlyGuard(context);
 
-  return { browser, context, guard };
+  return { app, baseUrl, browser, context, guard };
 }
 
 export async function closeSession(session: Session): Promise<void> {
@@ -35,6 +48,8 @@ export async function closeSession(session: Session): Promise<void> {
 export function assertAuthenticated(page: Page): void {
   const url = page.url();
   if (LOGIN_URL_PATTERN.test(url)) {
-    throw new Error(`Session expired — landed on ${url}. Run:  npm run login`);
+    throw new Error(
+      `Session expired — landed on ${url}. Re-run:  npm run login -- --app <appName>`,
+    );
   }
 }
