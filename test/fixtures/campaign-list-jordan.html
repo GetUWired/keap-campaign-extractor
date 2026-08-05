@@ -1,0 +1,79 @@
+<!--
+  Real /Reports/searchTemplate.jsp?reportClass=SetupFunnel&view=resultsPage response,
+  app "jordan", build 1.70.0.989251-sysarch-202608031100, captured 2026-08-04.
+
+  ONLY the report region is kept. The full page embeds the operator's email address in
+  Pendo, FullStory and Intercom configuration, two analytics API keys, and a menu listing
+  every other client account the operator can reach. None of it is needed to parse a table.
+
+  Six rows sampled verbatim from page 1, chosen for their variation:
+    999  no category, no date, no publisher   — never published
+    987  category, date, publisher            — fully populated
+    953  no category, but date and publisher
+    745  publisher is the literal string "N/A", not an empty cell
+    676  name contains an HTML entity (&ndash;)
+    592  category, no date
+
+  numberOfRecords stays at its real value of 170 even though six rows are kept. That is
+  deliberate: it makes this fixture exercise the short-read failure path, which is how
+  enumeration goes wrong silently in production.
+
+  The checkbox <th> is kept (column indices depend on it) but its dropdown contents are
+  trimmed — the parser reads only span.header-sort-name, which that cell has none of.
+-->
+<input type="hidden" id="reportStateId" value="6df5eb9a-3e7f-4bc3-8aa8-1fec92114637"/>
+<input type=hidden id="numberOfSelectedRecords" value="0"/>
+<input type=hidden id="numberOfRecords" value="170"/>
+
+<table width="100%" cellpadding="0px" cellspacing="0px" border="0px" class="zebra-striped tabular data-table"><tr class="tr-noborder"><th class="thead-noborder-check" nowrap="nowrap"><div class="checkbox-dropdown-button"><input type="checkbox" id="selectAllCheckbox"/></div></th><th nowrap="nowrap" align="" class="thead-noborder-id "><a class="header-sort" href="javascript:resortLink('Id','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Id</span><img class="header-sort-arrow" src="/resources/component/reports/reports-sort-arrow-down.svg" height="16" width="16"></a></th>
+<th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('Name','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Name</span></a></th>
+<th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('FunnelCategory','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Categories</span></a></th>
+<th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('ActiveContacts','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Active Contacts</span></a></th>
+<th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('PublishedDate','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Published Date</span></a></th>
+<th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('PublishedBy','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Published By</span></a></th>
+</tr>
+<tr class="data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=999, FunnelId=999}"/></td><td class='dt' align="" >999</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=999">Untitled automation</a></span></td>
+<td class='dt-wrap' align="" ></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=999">0</a></td>
+<td class='dt' align="" ></td>
+<td class='dt' align="" ></td>
+</tr><tr class="alt-data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=987, FunnelId=987}"/></td><td class='dt' align="" >987</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=987">WooConnection Beta Tester Application</a></span></td>
+<td class='dt-wrap' align="" ><span style='min-width: 150px; display: inline-block'>WooConnection</span></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=987">0</a></td>
+<td class='dt' align="" >11/10/2020 8:31 AM</td>
+<td class='dt' align="" >Amy Anton</td>
+</tr><tr class="data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=953, FunnelId=953}"/></td><td class='dt' align="" >953</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=953">ListCleaner Open Balance Collection</a></span></td>
+<td class='dt-wrap' align="" ></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=953">0</a></td>
+<td class='dt' align="" >11/7/2025 1:59 PM</td>
+<td class='dt' align="" >Dallin Young</td>
+</tr><tr class="alt-data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=745, FunnelId=745}"/></td><td class='dt' align="" >745</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=745">Cancel ListCleaner</a></span></td>
+<td class='dt-wrap' align="" ><span style='min-width: 150px; display: inline-block'>ListCleaner.io Campaigns</span></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=745">0</a></td>
+<td class='dt' align="" >1/30/2020 12:25 PM</td>
+<td class='dt' align="" >N/A</td>
+</tr><tr class="alt-data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=676, FunnelId=676}"/></td><td class='dt' align="" >676</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=676">Bundle Offer &ndash; Convert Leads (Shopify)</a></span></td>
+<td class='dt-wrap' align="" ><span style='min-width: 150px; display: inline-block'>Old Campaigns</span></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=676">0</a></td>
+<td class='dt' align="" ></td>
+<td class='dt' align="" ></td>
+</tr><tr class="alt-data-td">
+<td class="col-chk"><input type="checkbox" name="rowchk" class="check _funnelsearchname_chk" value="{Id=592, FunnelId=592}"/></td><td class='dt' align="" >592</td>
+<td class='dt-wrap' align="" ><span style='min-width: 250px; display: inline-block'><a target="_top" href="/app/funnel/funnelEditor?funnelId=592">test</a></span></td>
+<td class='dt-wrap' align="" ><span style='min-width: 150px; display: inline-block'>Old Campaigns</span></td>
+<td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=592">0</a></td>
+<td class='dt' align="" ></td>
+<td class='dt' align="" ></td>
+</tr></table>
+
+<input name="currentPage" value="1" type="hidden" id="currentPage" /><input name="pageSet" value="1" type="hidden" id="pageSet" /><input name="perPage" value="50" type="hidden" id="perPage" />
