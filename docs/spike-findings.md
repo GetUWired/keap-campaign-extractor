@@ -830,3 +830,94 @@ experiments produced three irreversible states today and only the last is in `ar
 **The session expired a second time**, mid-experiment, consistent with the ~30-minute window in §8.
 It failed cleanly with nothing written and nothing clobbered. Irrelevant to a bulk run at 6.5 minutes
 per account; awkward for interactive work like this.
+
+## 15. Rendering
+
+Added 2026-08-06. `artifacts/jordan/rendered/` — 170 Markdown pages plus an index, generated offline
+in seconds from `normalized/`, `graph.json` and `entities.json`.
+
+Each page carries a Mermaid diagram of the campaign level, every goal and step in English, and what
+the campaign connects to in both directions. Rendering adds no information. Its entire value is
+making existing information impossible to miss — and on the first real run it did that four times.
+
+### Entities were never decoded anywhere
+
+`cleanName` strips `~br~` and collapses whitespace, but nothing in the pipeline ever decoded HTML
+entities. **76 labels and 95 note bodies carried `&#39;` and `&quot;` straight through extraction,
+normalisation and the graph** — including timer descriptions reading "the contact&#39;s next
+Birthday".
+
+Nothing had ever displayed that text, so nothing had noticed. Rendering is what made a long-standing
+data defect visible, and it is fixed at the render layer rather than in `cleanName`, so the
+normalised artifacts stay byte-identical to what was extracted.
+
+**Catalog names needed it too, and that was the sharper miss.** Names from the REST API never pass
+through `cleanName` at all, so one webform arrived as
+`"Request our\nEmail Series\n&quot;How to generate\nleads online&quot;"` and put four broken lines
+into a page. The fix cleans every name at the point it enters the renderer.
+
+### Timers needed no arithmetic after all
+
+Keap writes the human-readable description into `name`:
+
+```
+"Wait at least 3 days and then run on a weekday at 8:00 AM"
+```
+
+So timers render verbatim and **handoff §14 Q2's timezone discrepancy does not block display** —
+showing Keap's own string shows exactly what the builder shows. Q2 stays open for anything that needs
+to *reason* about timing. This removed the fiddliest part of the planned work entirely.
+
+### One style, several meanings
+
+`newsletterRequest` is a web form submission 106 times, a landing page 20 times, an internal form 7
+times, and unconfigured 69 times. The flat style→label table originally specced could not have
+expressed that; labels are derived from style **and** references instead.
+
+Keap has also shipped several builders over the years — `email`, `bardEmail` and `unlayerEmail` are
+one thing to a reader, as are `landingPage` and `convrrtLandingPage`. Internal style names never
+appear in output.
+
+**Still unsettled:** `stageMove`, `makeCall`, `indicateInterest` and `fileDownload` all carry an
+optional `stageId` that most instances leave unset — 7 of 82 for `indicateInterest`, 2 of 13 for
+`fileDownload`. They may be one goal type in the current UI or four. They keep distinct labels until
+someone who knows the builder says otherwise; calling them all "stage move" would misdescribe the
+majority that move no stage.
+
+### 28 sequences do nothing but were not counted as empty
+
+A sequence whose only step is the `start` vertex has one step and does nothing. Section 11 counted
+only `steps.length === 0`, so the account's dead-sequence figure was **365 when the true number is
+393**.
+
+Both of campaign 987's terminal branches are like this — and they are the two sequences a human
+marked ready and published on the same afternoon.
+
+### What the diagrams surfaced that the counts had not
+
+**Campaign 987 routes contacts into two dead ends.** "Approved for Beta" and "Declined for Beta"
+contain nothing. As two rows inside a count of 365 nobody noticed; as two boxes labelled `(empty)` it
+is the first thing you see.
+
+**Worse, its two goals are the same trigger.** "Approved" and "Declined" both wait on tag 1019,
+`0 - 50 New Contacts` — a tag with nothing to do with beta approval. Approving and declining an
+applicant do the same thing. That was in the normalised data all along; it became visible only when
+the page named the tag each goal waits for rather than just the goal.
+
+Neither is a rendering defect. Both are defects in a live campaign, found by looking at it.
+
+### Pre-existing mojibake, deliberately not repaired
+
+Five names in campaign 672 contain a stray `U+00C2` — the signature of a UTF-8 non-breaking space
+decoded as Latin-1. It arrives that way from Keap.
+
+Left alone on purpose. A mojibake-repair heuristic guesses at encoding damage, and `U+00C2` is a
+legitimate character in other contexts; the risk of corrupting good text outweighs five cosmetic
+occurrences. This is the `stripLongSuffix` lesson: a narrow correct fix beats a broad clever one.
+
+### Legibility at the top end
+
+The median campaign has 14 renderable nodes; the largest has 112 and 86 steps. Diagrams cover the
+campaign level only — goals, decisions and sequences — so campaign 751 renders as 10 goals, 2
+decisions and 14 sequence boxes rather than a hairball. Steps are linear by construction and read
+better as an ordered list, which the page provides.
