@@ -41,22 +41,34 @@ function textOrNull(cell: Selection | undefined): string | null {
 }
 
 /**
+ * The report header row — the one whose own cells carry sortable column labels.
+ *
+ * The match is on direct `th` children. Testing with a recursive find() picks
+ * up the outer wrapper row instead, since it contains the entire data table.
+ */
+function headerRowOf($: Q): Selection {
+  return $('tr')
+    .filter((_, el) => $(el).children('th').find('span.header-sort-name').length > 0)
+    .first();
+}
+
+/**
  * Builds a column-label → index map from the header row.
  *
  * The report renders each label inside span.header-sort-name. Reading cells by
  * label rather than by fixed position means an added or reordered column cannot
  * silently shift every field — the failure that made the decision parser return
  * confident, empty results.
+ *
+ * `children('th')` rather than `find('th')`: direct children only, so a nested
+ * table can never contribute a phantom column.
  */
-function headerIndex($: Q): Map<string, number> {
+function headerIndex($: Q, headerRow: Selection): Map<string, number> {
   const index = new Map<string, number>();
-  $('tr.tr-noborder')
-    .first()
-    .find('th')
-    .each((position, th) => {
-      const label = $(th).find('span.header-sort-name').first().text().trim();
-      if (label !== '') index.set(label, position);
-    });
+  headerRow.children('th').each((position, th) => {
+    const label = $(th).find('span.header-sort-name').first().text().trim();
+    if (label !== '') index.set(label, position);
+  });
   return index;
 }
 
@@ -68,7 +80,8 @@ export function parseCampaignList(html: string): CampaignList {
   const perPage = intOrNull($('#perPage').first().attr('value'));
   const reportStateId = $('#reportStateId').first().attr('value') ?? null;
 
-  const columns = headerIndex($);
+  const headerRow = headerRowOf($);
+  const columns = headerIndex($, headerRow);
   if (columns.size === 0) {
     warnings.push('no report header row found — this may not be the automations list page');
   }
@@ -85,15 +98,28 @@ export function parseCampaignList(html: string): CampaignList {
 
   const campaigns: CampaignSummary[] = [];
 
-  $('tr').each((_, row) => {
+  // Rows are scoped to the header's own table. The data table sits nested one
+  // row deep inside an outer grid-table, and that wrapper row contains the
+  // whole table — so a global $('tr') scan matches it too, and because find()
+  // is recursive it reports every descendant cell plus the first data row's
+  // link. Live, that produced a phantom 171st campaign whose every column was
+  // shifted by one, with a campaign name landing in the categories tally.
+  const dataTable = headerRow.closest('table');
+  const rowScope = dataTable.length > 0 ? dataTable : $.root();
+
+  rowScope.find('tr').each((_, row) => {
     const $row = $(row);
+    // Belt and braces: a genuine data row never wraps another table.
+    if ($row.find('table').length > 0) return;
+
     const link = $row.find('a[href*="funnelEditor?funnelId="]').first();
     if (link.length === 0) return;
 
     const funnelId = /funnelId=(\d+)/.exec(link.attr('href') ?? '')?.[1];
     if (funnelId === undefined) return;
 
-    const cells = $row.find('td');
+    // Direct children only, so cell indices always line up with the header.
+    const cells = $row.children('td');
     const publishedDate = textOrNull(cellAt(cells, 'Published Date'));
     const categoryText = textOrNull(cellAt(cells, 'Categories'));
 

@@ -93,6 +93,29 @@ describe('parseCampaignList resilience', () => {
     expect(result.campaigns.every((c) => c.published === false)).toBe(true);
   });
 
+  it('does not count the wrapper row that contains the data table', () => {
+    // The data table is nested one row deep inside an outer grid-table. A
+    // global $('tr') scan matches that wrapper too, and because .find() is
+    // recursive it reports every descendant cell and the first data row's
+    // link — yielding a phantom campaign with every column shifted by one.
+    // Live, this produced 171 campaigns against a page reporting 170.
+    const result = parseCampaignList(html);
+    const ids = result.campaigns.map((c) => c.funnelId);
+    expect(ids).toHaveLength(new Set(ids).size);
+    expect(result.campaigns).toHaveLength(6);
+  });
+
+  it('never lets a campaign name leak into the categories column', () => {
+    // The symptom the shifted phantom row produced: "Untitled automation"
+    // appearing in the category tally.
+    const names = new Set(parseCampaignList(html).campaigns.map((c) => c.name));
+    for (const campaign of parseCampaignList(html).campaigns) {
+      for (const category of campaign.categories) {
+        expect(names.has(category)).toBe(false);
+      }
+    }
+  });
+
   it('returns no campaigns and a warning for unrelated HTML', () => {
     const result = parseCampaignList('<html><body>Session expired</body></html>');
     expect(result.campaigns).toEqual([]);

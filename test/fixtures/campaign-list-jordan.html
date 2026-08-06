@@ -22,10 +22,24 @@
   trimmed — the parser reads only span.header-sort-name, which that cell has none of.
 -->
 <input type="hidden" id="reportStateId" value="6df5eb9a-3e7f-4bc3-8aa8-1fec92114637"/>
-<input type=hidden id="numberOfSelectedRecords" value="0"/>
-<input type=hidden id="numberOfRecords" value="170"/>
 
-<table width="100%" cellpadding="0px" cellspacing="0px" border="0px" class="zebra-striped tabular data-table"><tr class="tr-noborder"><th class="thead-noborder-check" nowrap="nowrap"><div class="checkbox-dropdown-button"><input type="checkbox" id="selectAllCheckbox"/></div></th><th nowrap="nowrap" align="" class="thead-noborder-id "><a class="header-sort" href="javascript:resortLink('Id','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Id</span><img class="header-sort-arrow" src="/resources/component/reports/reports-sort-arrow-down.svg" height="16" width="16"></a></th>
+<!--
+  The data table is nested inside an outer grid-table, one row deep. That
+  wrapper row is why a global $('tr') scan double-counts: cheerio's .find() is
+  recursive, so the wrapper reports every descendant cell (1191 of them live)
+  and its "first" funnelEditor link is the first data row. Reproduced here
+  exactly, because trimming it away is what let that bug reach a live run.
+-->
+<table width="100%" class="grid-table" cellpadding="0" cellspacing="0">
+<tr>
+    <td class="pager-div_funnelsearchname">
+       <input type=hidden id="numberOfSelectedRecords" value="0"/>
+<input type=hidden id="numberOfRecords" value="170"/>
+    </td>
+</tr>
+<tr>
+                <td width="100%">
+                    <table width="100%" cellpadding="0px" cellspacing="0px" border="0px" class="zebra-striped tabular data-table"><tr class="tr-noborder"><th class="thead-noborder-check" nowrap="nowrap"><div class="checkbox-dropdown-button"><input type="checkbox" id="selectAllCheckbox"/></div></th><th nowrap="nowrap" align="" class="thead-noborder-id "><a class="header-sort" href="javascript:resortLink('Id','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Id</span><img class="header-sort-arrow" src="/resources/component/reports/reports-sort-arrow-down.svg" height="16" width="16"></a></th>
 <th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('Name','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Name</span></a></th>
 <th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('FunnelCategory','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Categories</span></a></th>
 <th nowrap="nowrap" align="" class="thead-noborder "><a class="header-sort" href="javascript:resortLink('ActiveContacts','6df5eb9a-3e7f-4bc3-8aa8-1fec92114637')"><span class="header-sort-name">Active Contacts</span></a></th>
@@ -74,6 +88,8 @@
 <td class='dt' align="" ><a href="/Reports/searchTemplate.jsp?reportClass=FunnelUniqueContacts&view=resultsPage&RunSearch=true&Status_DATA=Active&Funnel_DATA=592">0</a></td>
 <td class='dt' align="" ></td>
 <td class='dt' align="" ></td>
-</tr></table>
+</tr></table></td>
+            </tr>
+</table>
 
 <input name="currentPage" value="1" type="hidden" id="currentPage" /><input name="pageSet" value="1" type="hidden" id="pageSet" /><input name="perPage" value="50" type="hidden" id="perPage" />

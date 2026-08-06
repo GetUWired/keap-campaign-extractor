@@ -64,12 +64,19 @@ async function main(): Promise<void> {
       return;
     }
 
-    // A truncated list looks exactly like a smaller account, so it must never
-    // be written. Everything downstream would treat it as the whole corpus.
-    if (list.total !== null && list.campaigns.length < list.total) {
+    // Any disagreement with the page's own count is a failure, in both
+    // directions. Too few means a truncated list, which looks exactly like a
+    // smaller account. Too many means rows are being double-counted — which
+    // happened, and the extra row had every column shifted by one.
+    if (list.total !== null && list.campaigns.length !== list.total) {
+      const short = list.campaigns.length < list.total;
       fail(
-        `short read: parsed ${list.campaigns.length} of ${list.total} campaigns. ` +
-          'Retry with a larger page size, e.g. --per-page 1000.',
+        `count mismatch: parsed ${list.campaigns.length} campaigns but the page reports ` +
+          `${list.total}. ${
+            short
+              ? 'Retry with a larger page size, e.g. --per-page 1000.'
+              : 'Rows are being counted more than once — this is a parser bug, not a page-size problem.'
+          }`,
       );
       return;
     }
