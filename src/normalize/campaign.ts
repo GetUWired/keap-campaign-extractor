@@ -98,7 +98,9 @@ export function orderSteps(steps: NormalizedNode[], edges: RawEdge[]): StepOrder
     const node = byId.get(current);
     if (node) ordered.push(node);
 
-    const next = outbound.get(current) ?? [];
+    // Annotated explicitly: `current` is assigned from `next[0]` while `next`
+    // derives from `current`, which TypeScript cannot infer through.
+    const next: string[] = outbound.get(current) ?? [];
     if (next.length > 1) return fallback(`branch at cell ${current}; keeping document order`);
     current = next[0];
   }
