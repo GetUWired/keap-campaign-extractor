@@ -38,38 +38,75 @@ to — generated from files already on disk.
 | Output | Markdown, one file per campaign | Renders in GitHub, VS Code, Notion, Obsidian; diffable and greppable; mirrors how `normalized/` already works. |
 | Diagram scope | Campaign level only — goals, decisions, sequences | Median campaign is 14 nodes and 4 top-level edges. Steps are what make the 14 largest campaigns unreadable, and they belong in lists. |
 | Primary label | The node's own `name` | Populated on **83%** of goals and steps, and it is what the operator sees in the builder. |
-| Type names in output | Empirical default labels, never internal styles | `newsletterRequest` and `indicateInterest` are legacy identifiers nobody recognizes. |
+| Type names in output | Derived from style AND references, never internal styles | One style can mean three things: `newsletterRequest` is a web form, landing page or internal form depending on what it carries. |
 | Timers | Verbatim from `name` | Keap already writes the English. |
 | Prose templates | Only where `name` is absent or useless | Four cases, not twelve. |
 
-## 5. Type labels: never show an internal style
+## 5. Type labels: what a node does, from style *and* references
 
-Internal style names are legacy identifiers that do not match anything in the UI. Each style has a
-default name Keap writes into the box, recoverable from the corpus by taking the most common `name`
-per style:
+Internal style names are legacy identifiers that do not match anything in the UI, and — crucially —
+**one style can mean several different things.** `newsletterRequest` is the clearest case:
 
-| Internal style | Renders as | Evidence |
+| `newsletterRequest` carries | count | actually is |
 |---|---|---|
-| `http` | **Send HTTP Post** | default name on 26 of 60 nodes |
-| `newsletterRequest` | **Web form submitted** | 205 nodes; carries `webformId`, `landingPageId`, `internalFormId` |
-| `indicateInterest` | **Opportunity stage moved** | 82 nodes; carries `stageId`; names are pipeline stages — "New Lead", "Contacted", "Negotiating", "Closed" |
-| `requestInfo` | **Request information** | default name; carries `stageId`, `webformId`, `internalFormId` |
-| `purchaseSuccess` | **Purchase made** | default name "Purchase online" on 8 nodes |
+| `webformId` | 106 | a web form submission |
+| `landingPageId` | 20 | a landing page submission |
+| `internalFormId` | 7 | an internal form submission |
+| nothing | 69 | unconfigured |
 
-The table is **hardcoded, not computed at run time.** Deriving it from whichever corpus is loaded
-would make output depend on the account being rendered; a reviewed table is deterministic. Any style
-absent from the table renders as its raw style name — visibly odd, which is the point: it asks to be
-added rather than passing silently.
+A flat style→label table cannot express that. So the label is a function of the **node**, not the
+style:
 
-**These labels are inferred, and two of them are inferences rather than observations.** `http`,
-`requestInfo` and `purchaseSuccess` come straight from Keap's own default names. But "Web form
-submitted" and "Opportunity stage moved" are *my* readings of what those goals do, drawn from the
-foreign keys they carry and the names operators gave them — Keap's own defaults are the unhelpful
-"Sign up for newsletter" and "Indicate interest". The `stageId` reading is corroborated (an
-opportunity moving stage in a pipeline) but the phrasing is not verified against the current UI.
+```ts
+export function typeLabel(node: NormalizedNode): string;
+```
 
-Anyone who knows the builder should correct this table on sight. It lives in one place for exactly
-that reason, and nothing else in the renderer depends on the wording.
+**Styles collapse into families first.** Keap has shipped several builders over the years and the
+generation is an implementation detail no reader needs:
+
+| Family | Styles | Label |
+|---|---|---|
+| Email | `email`, `bardEmail`, `unlayerEmail` | Email |
+| Landing page | `landingPage`, `convrrtLandingPage` | Landing page submitted |
+| Submission | `newsletterRequest`, `requestInfo` | resolved by reference — see above |
+
+Verified: all three email styles reference `marketingEmailId` and nothing else; both landing-page
+styles are landing pages.
+
+Where a style resolves by reference and carries none, the label says so — "Form submitted
+(unconfigured)" — rather than picking a default it cannot justify.
+
+The family and label tables are **hardcoded, not computed at run time.** Deriving them from whichever
+corpus is loaded would make output depend on the account being rendered. Any style in neither table
+renders as its raw style name — visibly odd, which is the point: it asks to be added rather than
+passing silently.
+
+### One label set is unresolved, and deliberately left alone
+
+`stageMove`, `makeCall`, `indicateInterest` and `fileDownload` all carry an optional `stageId`, but
+most instances leave it unset — 7 of 82 for `indicateInterest`, 2 of 13 for `fileDownload`. They may
+all be one goal type in the current UI, or four distinct ones that can each move a pipeline stage.
+
+Until that is settled they keep separate labels drawn from Keap's own defaults. Calling all of them
+"stage move" would misdescribe the majority that move no stage. This is one line per style in one
+table, so correcting it later is trivial — and nothing else in the renderer depends on the wording.
+
+## 5a. What a node does versus why it does it
+
+Every campaign element has two components, and conflating them is how renderers become vague:
+
+- **What** it does — form submitted, email sent, tag applied. Fully mechanical: style plus
+  references, as above. Deterministic and testable.
+- **Why** it does it — the operator's intent, which lives in the node's own name ("Request our Email
+  Series") and takes further meaning from the campaign's name around it.
+
+This renderer presents both **faithfully and verbatim**: the mechanism it derives, the operator's own
+words it quotes. It never paraphrases intent.
+
+*Inferring* why — reading a step name in the context of its campaign and synthesizing what the
+automation is for — is the LLM narrative pass at the end of handoff stage 4, and is out of scope
+(§3). The value of keeping that boundary sharp is that everything here stays testable, and the LLM
+pass gets clean structured input rather than prose that already guessed.
 
 ## 6. Timers need no arithmetic
 
@@ -95,7 +132,7 @@ export interface ProseContext {
 }
 
 export function describeNode(node: NormalizedNode, context: ProseContext): string;
-export function typeLabel(style: string): string;
+export function typeLabel(node: NormalizedNode): string;
 ```
 
 Prose leads with the node's `name`. Templates exist only for the cases where that fails:
