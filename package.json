@@ -12,6 +12,7 @@
     "enumerate": "tsx src/cli/enumerate.ts",
     "extract-all": "tsx src/cli/extractAll.ts",
     "normalize": "tsx src/cli/normalize.ts",
+    "enrich": "tsx src/cli/enrich.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

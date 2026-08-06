@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName, normalizeFunnelId } from '../app.js';
+import type { EntityCatalogue } from '../api/catalogue.js';
 import { type NormalizedCampaign, normalizeCampaign } from '../normalize/campaign.js';
 import { buildGraph } from '../normalize/graph.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
@@ -160,7 +161,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  const graph = buildGraph(normalized);
+  // Enrichment is additive: a missing or unreadable catalogue costs names, not
+  // the graph. It must never be required in order to normalise.
+  let catalogue: EntityCatalogue | undefined;
+  const cataloguePath = join('artifacts', args.app, 'entities.json');
+  if (existsSync(cataloguePath)) {
+    try {
+      catalogue = JSON.parse(await readFile(cataloguePath, 'utf8')) as EntityCatalogue;
+      console.log(
+        `  using catalogue: ${catalogue.entities.length} entities fetched ${catalogue.fetchedAt}`,
+      );
+    } catch {
+      console.log(`  warning: ${cataloguePath} is unreadable — building the graph unenriched`);
+    }
+  } else {
+    console.log(`  no catalogue at ${cataloguePath} — building the graph unenriched`);
+  }
+
+  const graph = buildGraph(normalized, catalogue);
   const graphPath = join('artifacts', args.app, 'graph.json');
   await writeFile(graphPath, JSON.stringify(graph, null, 2), 'utf8');
 
@@ -178,6 +196,8 @@ async function main(): Promise<void> {
   console.log(`  tags nobody listens for: ${graph.findings.tagsNobodyListensFor.length}`);
   console.log(`  shared emails:           ${graph.findings.sharedEmails.length}`);
   console.log(`  duplicate tag appliers:  ${graph.findings.duplicateTagAppliers.length}`);
+  console.log(`  broken references:       ${graph.findings.entitiesNotFound.length}`);
+  console.log(`  unused account entities: ${graph.findings.unusedEntities.length}`);
   for (const warning of graph.warnings) console.log(`  warning: ${warning}`);
   console.log(`  output: ${graphPath}\n`);
 }
