@@ -423,9 +423,28 @@ Of 31,814 requests to the tenant during the full run, only about 480 were meanin
 ~98.5% were SVGs, fonts, CSS and JavaScript** — the cost of loading the entire campaign-builder UI
 160 times in order to read one DOM property off one element.
 
-Worth fixing on its own merits: it is most likely the bulk of the 2.18s per campaign, and it is what
-the handoff's "throttle and cache" rule is really about. Playwright's route interception is already
-installed for the read-only guard, so filtering by resource type is a small change to existing code.
+Broken down: **scripts 67.7%**, CSS 12.1%, images 10.4%, pages 6.0%, Polymer HTML imports 1.5%.
+Blocking images, CSS and fonts — the categories that provably cannot affect `draftXml` — would remove
+only 22.5%. The bulk is JavaScript, which may be load-bearing.
+
+**Deliberately deferred 2026-08-05.** At 2.18s per campaign a 398-campaign account takes about
+sixteen minutes, which is not a constraint worth optimising against yet. Recorded rather than acted
+on.
+
+Three tiers exist if it ever becomes worth doing, in increasing order of payoff and risk:
+
+1. Block images, CSS and fonts — no risk, ~155 requests per campaign instead of ~200.
+2. Also block external scripts — ~20 requests. `draftXml` is assigned by an *inline* script, which
+   still runs when external ones are blocked, so Polymer and mxGraph may be unnecessary given that
+   nothing is ever rendered. Unverified.
+3. No browser at all: a plain authenticated GET, parsing `draftXml` out of the inline script — **1**
+   request. This is the fast path handoff §9 names, along with its warning that the JS string
+   escaping is a footgun. Any implementation must extract the value without logging or storing the
+   surrounding script text, since session tokens sit beside it (§7 gotcha 4).
+
+Whichever is attempted, it is now cheaply decidable rather than arguable: every campaign on disk
+carries a `draftXmlSha256`, so a candidate approach can be verified byte-exact against 170 known-good
+extractions.
 
 ### Incidental
 
