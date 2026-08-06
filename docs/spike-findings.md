@@ -485,9 +485,10 @@ survey exactly. Two independent code paths, the same answer.
 
 ### Gaps this surfaced
 
-- **11 of 85 decisions have routing but no criteria.** Their `decisions/<cellId>.json` is absent, so
-  branches carry `rules: null`. Worth chasing before the relationship graph, since a decision that
-  tests a tag is an edge the graph would otherwise miss.
+- **11 of 85 decisions have no branches at all** — corrected 2026-08-06 while building the graph.
+  The earlier reading of "routing but no criteria" was wrong: every decision that has branches also
+  has criteria on disk (74 of 74). The 11 are unconfigured diamonds with an empty
+  `<Array as="decisions">`, so there is no routing to chase and nothing missing from the extraction.
 - **53 orphans** across the account — top-level nodes no edge touches. The handoff calls orphan
   detection free, and this is the first count of it.
 - **198 notes.** The handoff calls these the highest-signal text in the corpus, and there is
@@ -507,3 +508,90 @@ The app build changed mid-session, from `1.70.0.989251-sysarch-202608031100` to
 `1.70.0.990820-hf-202608041714` — Keap shipped a hotfix while this work was in progress. Nothing
 broke, but it is a reminder that every endpoint here is undocumented and can move without notice.
 `meta.json` records `appBuild` per campaign, so a future format change is at least attributable.
+
+## 12. The account relationship graph
+
+Added 2026-08-06. `artifacts/jordan/graph.json` — 762 entities, 780 edges, built offline from the
+normalised corpus in seconds.
+
+| Entities | | Edges | |
+|---|---|---|---|
+| campaign | 170 | `sends` | 250 |
+| tag | 142 | `entry-point` | 207 |
+| email | 250 | `applies` | 146 |
+| webform | 113 | `removes` | 99 |
+| landingPage | 60 | `tests` | 43 |
+| form | 16 | `listens-for` | 26 |
+| product | 11 | `triggers` (derived) | 9 |
+| | | `references-campaign` | 0 |
+
+The 142 tags are the 131 counted from `<Array as="tagIds">` plus **11 that appear only in decision
+criteria** — the excess over the floor is fully attributable, as the design predicted.
+
+### 50 campaigns had no id of their own
+
+`parseIdentity` reads `funnelId` off the first cell carrying an `appName` attribute, and **50 of the
+170 campaigns have no such cell** — so 29% of the normalised corpus carried `funnelId: null`. The
+graph would have collapsed all fifty into a single `campaign:null` node and produced a confidently
+wrong picture of the account.
+
+The artifact's own directory name is authoritative: extraction fetched by that id and filed the
+result under it. Where the XML does carry one, the two agree in all 120 cases. `normalizeCampaign`
+now takes it from the caller, exactly as it already did for the display name, and warns on
+disagreement.
+
+**This was invisible until something tried to use the id as a key.** Nothing in the normaliser's own
+output looked wrong.
+
+### The account is far more loosely coupled than expected
+
+**Only 9 `triggers` edges across 170 campaigns, and 5 of those are self-loops.** Four cross-campaign
+handoffs exist in the entire account:
+
+```
+campaign 16  → 467            via tag 346
+campaign 672 → 670, 674, 676  via tag 646
+```
+
+The tag counts say the same thing from the other side: **92 of the 142 tags are applied by a campaign
+nothing listens for**, and 44 are applied by nobody at all. Tags here are overwhelmingly
+record-keeping rather than wiring between campaigns.
+
+**Emails are never shared.** 250 distinct `marketingEmailId` values across 250 references — every
+email belongs to exactly one campaign. Only 13 tags are applied by more than one campaign.
+
+The practical consequence for a migration is good news: campaigns are mostly independent units, so
+they can be moved one at a time rather than in coupled clusters.
+
+### 10 campaigns cannot be entered
+
+Four have no goals at all — 199, 331, 411, 656. Six have goals, but every one is a `tagApplied` goal
+listening for a tag no *other* campaign applies: 557, 588, 672, 745, 809, 949. A campaign applying a
+tag it listens for does not rescue itself; the loop still needs an outside first push.
+
+Campaign 672 is the interesting one: it is unreachable, and it is also the account's largest trigger
+source, feeding 670, 674 and 676. A dead campaign holding three live ones open.
+
+Combined with the 91 never-published campaigns and 365 empty sequences already on record, this is
+the third independent signal pointing at the same conclusion about how much of this account is inert.
+
+### What the graph deliberately does not model
+
+- **14 of the 20 lifted foreign keys have no entity kind** — led by `marketingNoteId` (94
+  references), `fileBoxId` (43) and `stageId` (37). They stay in the normalised files, so widening
+  the entity vocabulary later costs a re-run and nothing else.
+- **24 `tagIds` references state no direction.** They sit on goal styles — `eventAttend` (6), `goal`
+  (6), `newsletterRequest` (4), `purchaseSuccess` (3), `indicateInterest` (2), `requestInfo` (2),
+  `eventRequest` (1) — that carry a tag without saying whether they apply it, require it, or
+  something else. The tags are registered as entities; no edge is invented. Settling this needs a
+  look at the live UI for one of each style.
+- **Only 6 of 142 tags have a display name.** Decision criteria are the sole source of names in the
+  extracted data, so everything else is a bare id until stage 3 resolves them through the REST API.
+  A graph of numbered tags is analysable but not yet readable.
+
+### Verification
+
+Every figure above was predicted from the corpus before the code was written, and the implementation
+reproduced all of them exactly — entity counts, edge counts per kind, and all five findings. Two
+independent derivations agreeing. The run is also byte-deterministic: a second `npm run normalize`
+produces an identical `graph.json`.
