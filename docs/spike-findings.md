@@ -446,6 +446,61 @@ Whichever is attempted, it is now cheaply decidable rather than arguable: every 
 carries a `draftXmlSha256`, so a candidate approach can be verified byte-exact against 170 known-good
 extractions.
 
+## 11. Normalisation
+
+Added 2026-08-06. All 170 campaigns are canonical JSON in `artifacts/jordan/normalized/`.
+
+| | |
+|---|---|
+| Campaigns normalised / skipped | **170 / 0** |
+| Sequences | 767 — of which **365 are empty** |
+| Steps | 1,824 |
+| Goals | 728 |
+| Notes | 198 |
+| Decisions | 85, of which 74 carry criteria |
+| Orphans | 53 |
+| Undocumented styles encountered | 0 |
+
+### Step ordering works, and document order would have been wrong
+
+Edges are separate cells carrying `source`/`target`, scoped by `parent`. Walking from the `start`
+vertex reproduces campaign 584's documented sequence exactly — `14, 81, 25, 27, 17` — while those
+edge cells appear in the XML as 28, 18, 82, 83. **Document order is not step order**, so a normaliser
+that trusted file order would have produced confidently wrong sequences for the whole corpus.
+
+**58 of 767 sequences (7.6%)** could not be walked to completion, every one because the walk reached
+some but not all steps. Those keep document order and are flagged `orderVerified: false` rather than
+being silently reordered.
+
+An earlier run reported 423 failures. **365 of those were sequences with no steps at all** — empty
+sequences have no start vertex, so they looked like walk failures. Treating an empty sequence as
+trivially ordered brought the real figure out from under the noise. Worth noting on its own account:
+**48% of the sequences in this account are empty**, which is a substantial signal for the
+live-versus-dead question.
+
+### Cross-validation
+
+The normalised corpus contains **131 distinct tags across 295 references** — matching the raw XML
+survey exactly. Two independent code paths, the same answer.
+
+### Gaps this surfaced
+
+- **11 of 85 decisions have routing but no criteria.** Their `decisions/<cellId>.json` is absent, so
+  branches carry `rules: null`. Worth chasing before the relationship graph, since a decision that
+  tests a tag is an edge the graph would otherwise miss.
+- **53 orphans** across the account — top-level nodes no edge touches. The handoff calls orphan
+  detection free, and this is the first count of it.
+- **198 notes.** The handoff calls these the highest-signal text in the corpus, and there is
+  substantially more of it than expected.
+
+### What is deliberately not done
+
+The account-level relationship graph — campaigns and shared entities as nodes, `applies` /
+`listens-for` / `triggers` as edges — is designed in
+`docs/superpowers/specs/2026-08-06-normaliser-design.md` §7 but not built. It is the piece that turns
+131 tags and 295 references into "what fires when tag 646 is applied" and "which campaigns are
+unreachable". Split into its own plan deliberately.
+
 ### Incidental
 
 The app build changed mid-session, from `1.70.0.989251-sysarch-202608031100` to
