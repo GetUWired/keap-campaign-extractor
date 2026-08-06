@@ -705,3 +705,104 @@ measured ceiling. State it as such: nothing here establishes where the limit is.
 - **60 landing pages** — no endpoint exists on either API version.
 - **16 internal forms** — 6 resolve but carry no name.
 - **102 tags and 50 webforms** — deleted from the account; correctly unnamed.
+
+## 14. Publication semantics, established by experiment
+
+Added 2026-08-06. Everything before this was inferred from static snapshots. Here a human made two
+deliberate changes in the campaign builder between extractions of campaign 987, which turns several
+guesses into observations. All three states are preserved in
+`test/fixtures/campaign-987-lifecycle/`.
+
+### `ready` is user-controlled, and independent of publication
+
+Ticking "ready" on two sequences changed exactly this, and nothing else:
+
+```diff
+- <Object name="Approved for Beta" flowType="Stop" published="0" initialized="1" as="value"/>
++ <Object name="Approved for Beta" flowType="Stop" published="0" initialized="1" ready="1" broken="0" as="value"/>
+```
+
+`published="0"` is unchanged and `publish.xml` is byte-identical across the transition. Readiness and
+publication are separate axes.
+
+**Before the change the attribute was absent entirely, not `ready="0"`.** So `ready: null` means
+"never marked" and is a distinct state from an explicit false. `boolOrNull` preserves all three,
+which is the only reason this was visible; a parser coercing absent to false would have erased it.
+
+The three states behave differently, and absent is the worst:
+
+| `ready` | share of references that resolve to a real account entity |
+|---|---|
+| `true` | 45% |
+| `false` (explicit) | 16% |
+| `null` (absent) | **7%** |
+
+### `published` at node level means "in the published snapshot"
+
+Not "finished". This is why it predicts nothing about whether a referenced entity exists — 36% of
+references resolve under `published=true` against 39% under false, which is noise.
+
+`ready` is the field carrying builder intent, and it is the one with signal.
+
+### `broken` is transient
+
+It appears when readiness is evaluated and is **removed entirely on publication** — zero occurrences
+remain in the published state. It is a pre-publish validation artifact, not durable state.
+
+That reframes the corpus survey: 910 nodes carry `broken`, and all of them are therefore unpublished.
+Any analysis treating it as a lasting property would have been reading unpublished-ness under
+another name. Caught before anything was built on it.
+
+### Keap refuses to publish a campaign containing an unconfigured step
+
+Publishing required deleting cell 43 — a `task` step with every field empty:
+
+```
+taskType="" taskTitle="" taskBody="" taskAssignToOwner="0" taskDaysTillDue="0"
+```
+
+The operator deleted it and its inbound edge rather than configure it, taking the campaign from 11
+steps to 10 and removing `task` from the style histogram. Publication also flipped `published` to
+`1` throughout and made `draft.xml` and `publish.xml` byte-identical, so `hasUnpublishedChanges`
+went `true` → `false` — **the only live validation that logic has had.**
+
+### This inverts the missing-entity story
+
+Entities referenced only by never-published campaigns exist in the account 31% of the time, against
+49% for those touched by at least one published campaign. The intuitive reading is that entities are
+missing *because* the campaign is unpublished.
+
+The mechanism is the other way round. Every published campaign has passed a validator that rejects
+unconfigured steps, so unconfigured steps survive mainly in campaigns that were never published — and
+those steps' references were never real entities to begin with. **A campaign is not missing entities
+because it is unpublished; it is unpublished because it still contains steps nobody finished.**
+
+Consequence for the graph: some part of the 155 "broken references" is unfinished drafting rather
+than breakage, and the graph currently cannot tell a reader which.
+
+### Readiness is the sharpest live-versus-dead signal yet
+
+| Sequences | |
+|---|---|
+| Marked ready | 158 of 767 |
+| Explicitly not ready | 135 |
+| Never marked | 474 |
+
+**102 of 170 campaigns have no ready sequence at all** — more than the 91 never published, and a
+better-grounded measure, because it records whether a human considered the work finished rather than
+whether it reached production.
+
+The 135 explicit `ready="0"` sequences are worth a second look: since absence is the untouched state,
+an explicit false plausibly means marked-then-unmarked. That mechanism is unconfirmed.
+
+### Two operational notes
+
+**Re-extraction destroys history.** `npm run spike` overwrites
+`artifacts/<app>/campaigns/<id>/` in place. Cell 43 now exists nowhere in Keap and nowhere in the
+artifacts — it survives only because it was copied into `test/fixtures/` by hand. `meta.json` stores
+`draftXmlSha256`, so a re-extraction can tell you something changed and never what. Three
+experiments produced three irreversible states today and only the last is in `artifacts/`.
+
+**The session expired a second time**, mid-experiment, consistent with the ~30-minute window in §8.
+It failed cleanly with nothing written and nothing clobbered. Irrelevant to a bulk run at 6.5 minutes
+per account; awkward for interactive work like this.
