@@ -3,10 +3,10 @@ import {
   KIND_CANDIDATES,
   UNSERVABLE_KINDS,
   assertAccountIdentity,
-  fetchCatalogue,
+  fetchCatalog,
   mapRecord,
   probeKind,
-} from '../src/api/catalogue.js';
+} from '../src/api/catalog.js';
 import { type ApiClient, ApiError } from '../src/api/client.js';
 
 describe('mapRecord', () => {
@@ -179,7 +179,7 @@ describe('probeKind', () => {
   });
 });
 
-describe('fetchCatalogue', () => {
+describe('fetchCatalog', () => {
   const profile = { '/crm/rest/v1/account/profile': { name: 'jordan' } };
 
   it('collects every available kind and records the ones that are not', async () => {
@@ -188,39 +188,39 @@ describe('fetchCatalogue', () => {
       '/crm/rest/v1/tags': [{ id: 646, name: 'Bought' }],
       '/crm/rest/v1/products': [{ id: 7, product_name: 'Course' }],
     });
-    const catalogue = await fetchCatalogue(client, 'jordan');
+    const catalog = await fetchCatalog(client, 'jordan');
 
-    expect(catalogue.appName).toBe('jordan');
-    expect(catalogue.entities).toContainEqual({
+    expect(catalog.appName).toBe('jordan');
+    expect(catalog.entities).toContainEqual({
       id: 'tag:646',
       kind: 'tag',
       name: 'Bought',
       extra: {},
     });
-    expect(catalogue.sources.tag).toEqual({ endpoint: '/crm/rest/v1/tags', count: 1 });
-    expect(catalogue.sources.user).toMatchObject({
+    expect(catalog.sources.tag).toEqual({ endpoint: '/crm/rest/v1/tags', count: 1 });
+    expect(catalog.sources.user).toMatchObject({
       unavailable: expect.stringContaining('no candidate endpoint answered'),
     });
   });
 
   it('records the proven-unservable kinds without spending a request on them', async () => {
     const client = fakeClient({ ...profile, '/crm/rest/v1/tags': [{ id: 1, name: 'x' }] });
-    const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.sources.landingPage).toMatchObject({
+    const catalog = await fetchCatalog(client, 'jordan');
+    expect(catalog.sources.landingPage).toMatchObject({
       unavailable: expect.stringContaining('404'),
     });
   });
 
   it('stamps fetchedAt as an ISO timestamp', async () => {
     const client = fakeClient({ ...profile, '/crm/rest/v1/tags': [{ id: 1, name: 'x' }] });
-    const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const catalog = await fetchCatalog(client, 'jordan');
+    expect(catalog.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('warns on a record it had to drop', async () => {
     const client = fakeClient({ ...profile, '/crm/rest/v1/tags': [{ name: 'no id' }] });
-    const catalogue = await fetchCatalogue(client, 'jordan').catch(() => null);
-    expect(catalogue).toBeNull(); // nothing usable was fetched at all
+    const catalog = await fetchCatalog(client, 'jordan').catch(() => null);
+    expect(catalog).toBeNull(); // nothing usable was fetched at all
   });
 
   it('warns about dropped records while still keeping the usable ones', async () => {
@@ -228,9 +228,9 @@ describe('fetchCatalogue', () => {
       ...profile,
       '/crm/rest/v1/tags': [{ name: 'no id' }, { id: 5, name: 'fine' }],
     });
-    const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.warnings.some((w) => /1 tag record\(s\) had no usable id/i.test(w))).toBe(true);
-    expect(catalogue.entities).toHaveLength(1);
+    const catalog = await fetchCatalog(client, 'jordan');
+    expect(catalog.warnings.some((w) => /1 tag record\(s\) had no usable id/i.test(w))).toBe(true);
+    expect(catalog.entities).toHaveLength(1);
   });
 
   it('keeps webforms and internal forms in separate id spaces', async () => {
@@ -239,8 +239,8 @@ describe('fetchCatalogue', () => {
       '/crm/rest/v2/webforms': [{ id: 681, title: 'Newsletter signup' }],
       '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }],
     });
-    const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.entities.map((e) => e.id).sort()).toEqual(['form:3', 'webform:681']);
+    const catalog = await fetchCatalog(client, 'jordan');
+    expect(catalog.entities.map((e) => e.id).sort()).toEqual(['form:3', 'webform:681']);
   });
 
   it('maps an email template from the templates sub-resource', async () => {
@@ -248,8 +248,8 @@ describe('fetchCatalogue', () => {
       ...profile,
       '/crm/rest/v2/emails/templates': [{ id: 1200, title: 'Tip 1', subject: 'Your first tip' }],
     });
-    const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.entities).toEqual([
+    const catalog = await fetchCatalog(client, 'jordan');
+    expect(catalog.entities).toEqual([
       { id: 'email:1200', kind: 'email', name: 'Tip 1', extra: { subject: 'Your first tip' } },
     ]);
   });
@@ -258,19 +258,19 @@ describe('fetchCatalogue', () => {
     // Insurance against re-introducing a shared endpoint in KIND_CANDIDATES —
     // exactly the mistake that once made every webform a phantom internal form.
     const client = fakeClient({ ...profile, '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }] });
-    const catalogue = await fetchCatalogue(client, 'jordan', [
+    const catalog = await fetchCatalog(client, 'jordan', [
       { kind: 'form', paths: ['/crm/rest/v1/forms'] },
       { kind: 'webform', paths: ['/crm/rest/v1/forms'] },
     ]);
 
-    expect(catalogue.entities.map((e) => e.id)).toEqual(['form:3']);
-    expect(catalogue.sources.webform).toEqual({
+    expect(catalog.entities.map((e) => e.id)).toEqual(['form:3']);
+    expect(catalog.sources.webform).toEqual({
       unavailable: '/crm/rest/v1/forms is already served as "form" — not separately resolvable',
     });
   });
 
   it('fails when no kind at all could be fetched', async () => {
-    await expect(fetchCatalogue(fakeClient(profile), 'jordan')).rejects.toThrow(/no entities/i);
+    await expect(fetchCatalog(fakeClient(profile), 'jordan')).rejects.toThrow(/no entities/i);
   });
 
   it('checks identity before fetching anything', async () => {
@@ -278,6 +278,6 @@ describe('fetchCatalogue', () => {
       '/crm/rest/v1/account/profile': { name: 'other' },
       '/crm/rest/v1/tags': [{ id: 1, name: 'x' }],
     });
-    await expect(fetchCatalogue(client, 'jordan')).rejects.toThrow(/does not mention/i);
+    await expect(fetchCatalog(client, 'jordan')).rejects.toThrow(/does not mention/i);
   });
 });

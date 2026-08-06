@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName, normalizeFunnelId } from '../app.js';
-import type { EntityCatalogue } from '../api/catalogue.js';
+import type { EntityCatalog } from '../api/catalog.js';
 import { type NormalizedCampaign, normalizeCampaign } from '../normalize/campaign.js';
 import { buildGraph } from '../normalize/graph.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
@@ -169,24 +169,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Enrichment is additive: a missing or unreadable catalogue costs names, not
+  // Enrichment is additive: a missing or unreadable catalog costs names, not
   // the graph. It must never be required in order to normalise.
-  let catalogue: EntityCatalogue | undefined;
-  const cataloguePath = join('artifacts', args.app, 'entities.json');
-  if (existsSync(cataloguePath)) {
+  let catalog: EntityCatalog | undefined;
+  const catalogPath = join('artifacts', args.app, 'entities.json');
+  if (existsSync(catalogPath)) {
     try {
-      catalogue = JSON.parse(await readFile(cataloguePath, 'utf8')) as EntityCatalogue;
+      catalog = JSON.parse(await readFile(catalogPath, 'utf8')) as EntityCatalog;
       console.log(
-        `  using catalogue: ${catalogue.entities.length} entities fetched ${catalogue.fetchedAt}`,
+        `  using catalog: ${catalog.entities.length} entities fetched ${catalog.fetchedAt}`,
       );
     } catch {
-      console.log(`  warning: ${cataloguePath} is unreadable — building the graph unenriched`);
+      console.log(`  warning: ${catalogPath} is unreadable — building the graph unenriched`);
     }
   } else {
-    console.log(`  no catalogue at ${cataloguePath} — building the graph unenriched`);
+    console.log(`  no catalog at ${catalogPath} — building the graph unenriched`);
   }
 
-  const graph = buildGraph(normalized, catalogue);
+  const graph = buildGraph(normalized, catalog);
   const graphPath = join('artifacts', args.app, 'graph.json');
   await writeFile(graphPath, JSON.stringify(graph, null, 2), 'utf8');
 

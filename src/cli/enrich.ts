@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName } from '../app.js';
-import { type EntityCatalogue, fetchCatalogue } from '../api/catalogue.js';
+import { type EntityCatalog, fetchCatalog } from '../api/catalog.js';
 import { createClient } from '../api/client.js';
 
 function fail(message: string): void {
@@ -44,9 +44,9 @@ async function main(): Promise<void> {
   }
 
   const started = Date.now();
-  let catalogue: EntityCatalogue;
+  let catalog: EntityCatalog;
   try {
-    catalogue = await fetchCatalogue(createClient(apiKey), app);
+    catalog = await fetchCatalog(createClient(apiKey), app);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
     return;
@@ -54,18 +54,18 @@ async function main(): Promise<void> {
 
   await mkdir(outDir, { recursive: true });
   const outPath = join(outDir, 'entities.json');
-  await writeFile(outPath, JSON.stringify(catalogue, null, 2), 'utf8');
+  await writeFile(outPath, JSON.stringify(catalog, null, 2), 'utf8');
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  console.log(`\n[${app}] catalogue: ${catalogue.entities.length} entities in ${elapsed}s`);
-  for (const [kind, source] of Object.entries(catalogue.sources)) {
+  console.log(`\n[${app}] catalog: ${catalog.entities.length} entities in ${elapsed}s`);
+  for (const [kind, source] of Object.entries(catalog.sources)) {
     console.log(
       'unavailable' in source
         ? `  ${kind.padEnd(12)} unavailable — ${source.unavailable}`
         : `  ${kind.padEnd(12)} ${String(source.count).padStart(5)}  ${source.endpoint}`,
     );
   }
-  for (const warning of catalogue.warnings) console.log(`  warning: ${warning}`);
+  for (const warning of catalog.warnings) console.log(`  warning: ${warning}`);
   console.log(`  output: ${outPath}\n`);
 }
 

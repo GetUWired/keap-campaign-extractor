@@ -1,4 +1,4 @@
-import type { EntityCatalogue } from '../api/catalogue.js';
+import type { EntityCatalog } from '../api/catalog.js';
 import type { NormalizedCampaign } from './campaign.js';
 import {
   type EdgeKind,
@@ -31,15 +31,15 @@ export interface GraphFindings {
   duplicateTagAppliers: { tagId: string; campaigns: string[] }[];
   /**
    * Referenced by a step someone marked ready, but absent from the account —
-   * genuine breakage worth chasing. Empty without a catalogue.
+   * genuine breakage worth chasing. Empty without a catalog.
    */
   entitiesNotFound: string[];
   /**
    * Absent from the account and referenced only by steps nobody marked ready —
-   * unfinished drafting rather than breakage. Empty without a catalogue.
+   * unfinished drafting rather than breakage. Empty without a catalog.
    */
   entitiesNeverBuilt: string[];
-  /** Catalogue entities nothing references — dead weight not to migrate. Empty without a catalogue. */
+  /** Catalog entities nothing references — dead weight not to migrate. Empty without a catalog. */
   unusedEntities: string[];
 }
 
@@ -144,7 +144,7 @@ export function computeFindings(
   usable: { campaign: NormalizedCampaign; from: string }[],
   edges: GraphEdge[],
   tagEntityIds: string[],
-  catalogue?: EntityCatalogue,
+  catalog?: EntityCatalog,
 ): GraphFindings {
   const appliers = campaignsByTarget(edges, 'applies');
   const listeners = campaignsByTarget(edges, 'listens-for');
@@ -180,7 +180,7 @@ export function computeFindings(
       .filter((id) => (grouped.get(id)?.size ?? 0) > 1)
       .map((id) => [id, sortIds(grouped.get(id) ?? [])]);
 
-  // Both are only meaningful against a catalogue: without one, "not found" and
+  // Both are only meaningful against a catalog: without one, "not found" and
   // "not looked up" are the same observation.
   //
   // That distinction also has to hold PER KIND. A kind the API could not serve
@@ -190,20 +190,20 @@ export function computeFindings(
   // every reference as "broken" would claim 310 campaigns point at deleted
   // records when the truth is that nothing was ever looked up. So a kind counts
   // only once it has proved comparable by matching at least one id.
-  const catalogued = new Set((catalogue?.entities ?? []).map((entry) => entry.id));
+  const cataloged = new Set((catalog?.entities ?? []).map((entry) => entry.id));
   const referenced = new Set(edges.filter((edge) => !edge.derived).map((edge) => edge.to));
 
   const kindOfId = (id: string): string => id.slice(0, id.indexOf(':'));
   const comparable = new Set<string>();
   for (const id of referenced) {
-    if (catalogued.has(id)) comparable.add(kindOfId(id));
+    if (cataloged.has(id)) comparable.add(kindOfId(id));
   }
 
   const missing =
-    catalogue === undefined
+    catalog === undefined
       ? []
       : [...referenced].filter(
-          (id) => !id.startsWith('campaign:') && comparable.has(kindOfId(id)) && !catalogued.has(id),
+          (id) => !id.startsWith('campaign:') && comparable.has(kindOfId(id)) && !cataloged.has(id),
         );
 
   // A missing entity means two different things depending on who pointed at it.
@@ -231,10 +231,10 @@ export function computeFindings(
   const entitiesNeverBuilt = sortIds(missing.filter((id) => !referencedByReady.has(id)));
 
   const unusedEntities =
-    catalogue === undefined
+    catalog === undefined
       ? []
       : sortIds(
-          [...catalogued].filter((id) => comparable.has(kindOfId(id)) && !referenced.has(id)),
+          [...cataloged].filter((id) => comparable.has(kindOfId(id)) && !referenced.has(id)),
         );
 
   return {
@@ -253,7 +253,7 @@ export function computeFindings(
 
 export function buildGraph(
   campaigns: NormalizedCampaign[],
-  catalogue?: EntityCatalogue,
+  catalog?: EntityCatalog,
 ): AccountGraph {
   const warnings: string[] = [];
 
@@ -294,12 +294,12 @@ export function buildGraph(
   const entities = new Map<string, GraphEntity>();
   const touchedBy = new Map<string, Set<string>>();
 
-  // Catalogue names win over decision-criteria labels: the criteria label is a
-  // snapshot taken whenever that decision was last saved, while the catalogue is
+  // Catalog names win over decision-criteria labels: the criteria label is a
+  // snapshot taken whenever that decision was last saved, while the catalog is
   // what the account says today. Disagreement is worth seeing, though — six tags
   // in the corpus carry both, a free cross-check between two independent
   // sources, the same class of check that validated the 131-tag count.
-  const catalogued = new Map((catalogue?.entities ?? []).map((entry) => [entry.id, entry]));
+  const cataloged = new Map((catalog?.entities ?? []).map((entry) => [entry.id, entry]));
 
   // Decision criteria render a tag as "Category -> Name"; the API returns the
   // bare name. Verified against all six tags that carry both labels: five
@@ -309,12 +309,12 @@ export function buildGraph(
     criteria === api || criteria.endsWith(` -> ${api}`);
 
   const labelFor = (id: string, fallback: string | null): string | null => {
-    const record = catalogued.get(id);
+    const record = cataloged.get(id);
     if (record?.name == null) return fallback;
     if (fallback !== null && !labelsAgree(fallback, record.name)) {
       warnings.push(
-        `${id}: decision criteria say "${fallback}" but the catalogue says ` +
-          `"${record.name}" — using the catalogue`,
+        `${id}: decision criteria say "${fallback}" but the catalog says ` +
+          `"${record.name}" — using the catalog`,
       );
     }
     return record.name;
@@ -363,7 +363,7 @@ export function buildGraph(
       usable,
       edges,
       [...entities.values()].filter((e) => e.kind === 'tag').map((e) => e.id),
-      catalogue,
+      catalog,
     ),
     warnings,
   };

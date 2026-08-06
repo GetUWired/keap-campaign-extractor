@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ALLOWED_PATHS, assertAllowed, isAllowed } from '../src/api/guard.js';
 
 describe('api guard', () => {
-  it('permits every entity path the catalogue needs', () => {
+  it('permits every entity path the catalog needs', () => {
     for (const path of [
       '/crm/rest/v1/tags',
       '/crm/rest/v2/tags',

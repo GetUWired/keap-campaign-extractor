@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EntityCatalogue } from '../src/api/catalogue.js';
+import type { EntityCatalog } from '../src/api/catalog.js';
 import { buildGraph } from '../src/normalize/graph.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
@@ -365,7 +365,7 @@ describe('findings', () => {
   });
 });
 
-const catalogue = (entities: EntityCatalogue['entities']): EntityCatalogue => ({
+const catalog = (entities: EntityCatalog['entities']): EntityCatalog => ({
   appName: 'jordan',
   fetchedAt: '2026-08-06T00:00:00.000Z',
   sources: {},
@@ -419,8 +419,8 @@ const emailStep = (cellId: string, id: string) => ({
   position: 0,
 });
 
-describe('buildGraph with a catalogue', () => {
-  it('labels entities from the catalogue', () => {
+describe('buildGraph with a catalog', () => {
+  it('labels entities from the catalog', () => {
     const graph = buildGraph(
       [
         makeCampaign({
@@ -428,7 +428,7 @@ describe('buildGraph with a catalogue', () => {
           sequences: [makeSequence({ steps: [applyStep('10', ['646']), emailStep('25', '1200')] })],
         }),
       ],
-      catalogue([
+      catalog([
         { id: 'tag:646', kind: 'tag', name: 'Bought', extra: {} },
         { id: 'email:1200', kind: 'email', name: 'Welcome 1', extra: { subject: 'Hello' } },
       ]),
@@ -437,7 +437,7 @@ describe('buildGraph with a catalogue', () => {
     expect(graph.entities.find((e) => e.id === 'email:1200')?.label).toBe('Welcome 1');
   });
 
-  it('prefers the catalogue name over a decision-criteria label, and warns on disagreement', () => {
+  it('prefers the catalog name over a decision-criteria label, and warns on disagreement', () => {
     const graph = buildGraph(
       [
         makeCampaign({
@@ -450,13 +450,13 @@ describe('buildGraph with a catalogue', () => {
           ],
         }),
       ],
-      catalogue([{ id: 'tag:346', kind: 'tag', name: 'Current Name', extra: {} }]),
+      catalog([{ id: 'tag:346', kind: 'tag', name: 'Current Name', extra: {} }]),
     );
     expect(graph.entities.find((e) => e.id === 'tag:346')?.label).toBe('Current Name');
     expect(graph.warnings.some((w) => /tag:346.*Stale Name.*Current Name/.test(w))).toBe(true);
   });
 
-  it('keeps the decision-criteria label for a tag the catalogue does not have', () => {
+  it('keeps the decision-criteria label for a tag the catalog does not have', () => {
     const graph = buildGraph(
       [
         makeCampaign({
@@ -469,29 +469,29 @@ describe('buildGraph with a catalogue', () => {
           ],
         }),
       ],
-      catalogue([]),
+      catalog([]),
     );
     expect(graph.entities.find((e) => e.id === 'tag:346')?.label).toBe('Only Name');
     expect(graph.warnings.filter((w) => /tag:346/.test(w))).toEqual([]);
   });
 
-  it('never overwrites a campaign label with a catalogue entry', () => {
+  it('never overwrites a campaign label with a catalog entry', () => {
     // campaign.name comes from meta.json and is authoritative.
     const graph = buildGraph(
       [makeCampaign({ funnelId: '16', name: 'Real Campaign Name' })],
-      catalogue([{ id: 'campaign:16', kind: 'campaign', name: 'API Name', extra: {} }]),
+      catalog([{ id: 'campaign:16', kind: 'campaign', name: 'API Name', extra: {} }]),
     );
     expect(graph.entities.find((e) => e.id === 'campaign:16')?.label).toBe('Real Campaign Name');
   });
 });
 
-describe('catalogue findings', () => {
+describe('catalog findings', () => {
   const readyEmailStep = (cellId: string, id: string) => ({
     ...emailStep(cellId, id),
     ready: true,
   });
 
-  it('reports a referenced entity the catalogue does not contain', () => {
+  it('reports a referenced entity the catalog does not contain', () => {
     // A campaign pointing at a deleted email is a broken campaign — but only
     // once the kind has proved comparable by matching at least one id, and only
     // when a step someone marked ready is what points at it.
@@ -506,7 +506,7 @@ describe('catalogue findings', () => {
           ],
         }),
       ],
-      catalogue([
+      catalog([
         { id: 'email:1300', kind: 'email', name: 'Still here', extra: {} },
         { id: 'email:9999', kind: 'email', name: 'Something else', extra: {} },
       ]),
@@ -530,13 +530,13 @@ describe('catalogue findings', () => {
           ],
         }),
       ],
-      catalogue([{ id: 'email:1300', kind: 'email', name: 'Still here', extra: {} }]),
+      catalog([{ id: 'email:1300', kind: 'email', name: 'Still here', extra: {} }]),
     );
     expect(graph.findings.entitiesNotFound).toEqual([]);
     expect(graph.findings.entitiesNeverBuilt).toEqual(['email:1200']);
   });
 
-  it('reports a catalogue entity nothing references', () => {
+  it('reports a catalog entity nothing references', () => {
     const graph = buildGraph(
       [
         makeCampaign({
@@ -544,7 +544,7 @@ describe('catalogue findings', () => {
           sequences: [makeSequence({ steps: [applyStep('10', ['346'])] })],
         }),
       ],
-      catalogue([
+      catalog([
         { id: 'tag:346', kind: 'tag', name: 'In use', extra: {} },
         { id: 'tag:500', kind: 'tag', name: 'Unused', extra: {} },
       ]),
@@ -552,7 +552,7 @@ describe('catalogue findings', () => {
     expect(graph.findings.unusedEntities).toEqual(['tag:500']);
   });
 
-  it('leaves both empty when no catalogue was supplied', () => {
+  it('leaves both empty when no catalog was supplied', () => {
     // "not found" and "not looked up" are different claims.
     const graph = buildGraph([
       makeCampaign({
@@ -565,8 +565,8 @@ describe('catalogue findings', () => {
   });
 
   it('never reports a campaign as not found', () => {
-    // Campaigns come from the artifact directory, not the catalogue.
-    const graph = buildGraph([makeCampaign({ funnelId: '16' })], catalogue([]));
+    // Campaigns come from the artifact directory, not the catalog.
+    const graph = buildGraph([makeCampaign({ funnelId: '16' })], catalog([]));
     expect(graph.findings.entitiesNotFound).toEqual([]);
   });
 });
@@ -580,7 +580,7 @@ describe('findings only claim what was actually looked up', () => {
       references: { tagIds: [], tagCategoryIds: [], webformId: id },
     });
 
-  it('never calls a reference broken for a kind the catalogue could not compare', () => {
+  it('never calls a reference broken for a kind the catalog could not compare', () => {
     // Landing pages have no endpoint and the email template library shares no
     // id with any marketingEmailId. Reporting those as "broken" would claim the
     // campaigns point at deleted records, when nothing was ever looked up.
@@ -592,9 +592,9 @@ describe('findings only claim what was actually looked up', () => {
           sequences: [makeSequence({ steps: [emailStep('25', '1200')] })],
         }),
       ],
-      // The catalogue covers webforms and matches one; it says nothing about
+      // The catalog covers webforms and matches one; it says nothing about
       // any email that this campaign references.
-      catalogue([
+      catalog([
         { id: 'webform:681', kind: 'webform', name: 'Signup', extra: {} },
         { id: 'email:150', kind: 'email', name: 'A template', extra: {} },
       ]),
@@ -611,7 +611,7 @@ describe('findings only claim what was actually looked up', () => {
           goals: [webformGoal('2', '681'), webformGoal('3', '999')],
         }),
       ],
-      catalogue([
+      catalog([
         { id: 'webform:681', kind: 'webform', name: 'Signup', extra: {} },
         { id: 'webform:777', kind: 'webform', name: 'Never used', extra: {} },
       ]),

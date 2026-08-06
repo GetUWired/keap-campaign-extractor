@@ -11,7 +11,7 @@ export interface EntityRecord {
 
 export type KindSource = { endpoint: string; count: number } | { unavailable: string };
 
-export interface EntityCatalogue {
+export interface EntityCatalog {
   appName: string;
   /** Network data, so staleness is meaningful. Unlike graph.json, this is not deterministic. */
   fetchedAt: string;
@@ -186,11 +186,11 @@ export async function probeKind(
   return { unavailable: `no candidate endpoint answered: ${tried.join(', ')}` };
 }
 
-export async function fetchCatalogue(
+export async function fetchCatalog(
   client: ApiClient,
   appName: string,
   candidates: { kind: EntityKind; paths: string[] }[] = KIND_CANDIDATES,
-): Promise<EntityCatalogue> {
+): Promise<EntityCatalog> {
   await assertAccountIdentity(client, appName);
 
   const sources: Record<string, KindSource> = {};
@@ -246,7 +246,7 @@ export async function fetchCatalogue(
 
   if (entities.length === 0) {
     throw new Error(
-      'no entities fetched from any endpoint — a silent empty catalogue is worse than an error',
+      'no entities fetched from any endpoint — a silent empty catalog is worse than an error',
     );
   }
 
