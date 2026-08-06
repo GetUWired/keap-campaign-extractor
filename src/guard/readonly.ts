@@ -23,6 +23,28 @@ export const STATIC_PATH_PREFIXES = [
   '/files/',
 ];
 
+/**
+ * Extensions that identify a static asset wherever it is served from.
+ *
+ * Prefixes alone are not enough: the campaign editor loads
+ * /app/funnel/_publish.svg, an icon that lives under /app/ and whose filename
+ * trips the denylist. A file with one of these extensions cannot change state.
+ */
+export const STATIC_FILE_EXTENSIONS = [
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.ico',
+  '.css',
+  '.js',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.map',
+];
+
 export type BlockReason = 'non-get' | 'denylist';
 
 export interface BlockedRequest {
@@ -74,6 +96,7 @@ export function classifyRequest(method: string, url: string): BlockReason | null
   }
 
   if (STATIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
+  if (STATIC_FILE_EXTENSIONS.some((ext) => pathname.toLowerCase().endsWith(ext))) return null;
   if (WRITE_URL_PATTERN.test(pathname)) return 'denylist';
 
   return null;

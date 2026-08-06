@@ -308,10 +308,104 @@ touched. Treat 91 as a floor on the dead count, not an estimate of it.
    header's own table using direct children, and any disagreement with the page's total now fails,
    naming which direction it went.
 
-### App URL shapes (open)
+### App URL shapes (open, still)
 
 The account menu exposes three distinct shapes across linked apps: `sp218.infusionsoft.com`,
 `app.infusionsoft.com?app_id=ro474`, and `keap.app?app_id=qw806`. `baseUrlFor` assumes the first
 only, and would build an unresolvable URL for the other two. Not fixed — it needs a real app of each
 shape to verify against, and `KEAP_BASE_URL` is an escape hatch meanwhile. Worth settling before a
 client migration rather than during one.
+
+## 10. Bulk extraction
+
+Added 2026-08-05. The whole `jordan` account is extracted.
+
+### Timing — the session problem is smaller than it looked
+
+**160 campaigns in 389.5 seconds, zero failures**, on one session that survived the entire run.
+
+| Measure | Value |
+|---|---|
+| Per campaign, including a 250ms throttle | 2.43s |
+| Per campaign, net of the throttle | 2.18s |
+| Projected for a 398-campaign account | ~16 minutes |
+
+That is comfortably inside the observed ~30-minute session window, which reframes the expiry
+problem: a full account does **not** need keepAlive. Resumability is insurance against a mid-run
+death, and the measured cost of resuming is one campaign — about two seconds.
+
+The earlier three-campaign sample predicted 1.75s; the real figure across 170 is 2.18s. The
+difference is campaign size: the sample happened to be small ones. The largest here was 148 cells
+against the sample's 43.
+
+### Scale of the corpus
+
+170 campaigns, **6,521 cells**, **85 decision diamonds**, 80 with a published version.
+
+### The style vocabulary is far larger than documented
+
+**61 distinct node styles. 47 were never documented** — the handoff listed 10, and the first two
+campaigns added 4 more.
+
+The most common undocumented ones, by cell count: `timerDate` 113, `indicateInterest` 82, `http` 60,
+`eventRequest` 36, `note` 35, `goal` 33, `requestInfo` 30, `makeCall` 23, `landingPage` 22,
+`eventAttend` 21, `fulfillment` 18, `api` 17, `website` 16, `noteApplied` 16. The tail runs down to
+single occurrences: `radioAd`, `customerHub`, `scoreAchieved`, `failedPurchase`, `createOrder`,
+`addToSequence`, `cancelSubscription`.
+
+**This is the strongest argument yet for not having built the normaliser earlier.** Its step
+taxonomy is its entire job, and designing one against the 14 styles known from two campaigns would
+have covered 23% of the vocabulary actually present. Note also that `http` (60) and `api` (17)
+represent outbound integrations — the "external coupling" relationship the handoff describes in §10,
+and far more common here than expected.
+
+### Two published signals disagree
+
+Enumeration reports 79 published; `publishXml` reports 80. They disagree about exactly one campaign:
+
+```
+899 "Testing Wooconnection" — list Published Date: none, publishXmlLength: 1863
+```
+
+The list's Published Date column is metadata; a non-empty `publishXml` is the artifact itself.
+**Treat `publishXml` as authoritative.** The consequence for the live-versus-dead classification is
+that the cheap signal available at enumeration time is slightly wrong, and the reliable one only
+exists after extraction.
+
+### A guard false positive, found by volume
+
+The full run blocked 3 requests on the denylist rather than the method rule:
+
+```
+GET /app/funnel/_publish.svg?b=…
+```
+
+An icon, blocked because its filename contains "publish". It sits under `/app/`, so the
+`/resources/` prefix exemption missed it. Harmless — `draftXml` is read from the DOM, not from
+rendered icons — but it demonstrates the denylist blocking a legitimate read, and the next such
+asset might matter. Fixed by exempting static file *extensions* wherever they are served from, not
+just static directories.
+
+Two runs of two and three campaigns never surfaced it. It took 170.
+
+### Resume verified, not assumed
+
+`progress.json` claimed campaign 999 was complete. Its directory was deleted, and the next run
+reported:
+
+```
+warning: 1 campaign(s) marked done have no artifacts on disk and will be re-extracted: 999
+```
+
+It re-extracted that campaign and only that campaign. This is the mitigation for keeping the
+progress record separate from the artifacts it describes, and it works.
+
+After the full run, `progress.json` lists 170 done and there are 170 campaign directories, with no
+entry on either side lacking a counterpart.
+
+### Incidental
+
+The app build changed mid-session, from `1.70.0.989251-sysarch-202608031100` to
+`1.70.0.990820-hf-202608041714` — Keap shipped a hotfix while this work was in progress. Nothing
+broke, but it is a reminder that every endpoint here is undocumented and can move without notice.
+`meta.json` records `appBuild` per campaign, so a future format change is at least attributable.

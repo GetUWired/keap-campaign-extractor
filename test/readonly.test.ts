@@ -29,6 +29,18 @@ describe('classifyRequest — allowed reads', () => {
   it('allows a decision-editor GET whose title parameter contains "save"', () => {
     expect(classifyRequest('GET', `${B}/app/funnel/configureCell?title=Save%20for%20later`)).toBeNull();
   });
+
+  it('allows a static asset under /app/ whose filename contains a denylisted word', () => {
+    // Observed live: the campaign editor loads /app/funnel/_publish.svg, an
+    // icon. It sits under /app/ so the /resources/ prefix exemption misses it,
+    // and "publish" in the filename got it blocked. A static file extension
+    // cannot change state whatever directory it is served from.
+    expect(
+      classifyRequest('GET', `${B}/app/funnel/_publish.svg?b=1.70.0.990820-hf-202608041714`),
+    ).toBeNull();
+    expect(classifyRequest('GET', `${B}/app/funnel/save-icon.png`)).toBeNull();
+    expect(classifyRequest('GET', `${B}/app/x/delete.css`)).toBeNull();
+  });
 });
 
 describe('classifyRequest — blocked writes', () => {
