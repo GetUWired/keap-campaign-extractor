@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName, normalizeFunnelId } from '../app.js';
-import { normalizeCampaign } from '../normalize/campaign.js';
+import { type NormalizedCampaign, normalizeCampaign } from '../normalize/campaign.js';
+import { buildGraph } from '../normalize/graph.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
 
 interface Args {
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
 
   const ids = args.funnelId !== null ? [args.funnelId] : (await readdir(campaignsDir)).sort();
   const allWarnings: string[] = [];
+  const normalized: NormalizedCampaign[] = [];
   const unverifiedSequences: string[] = [];
   let written = 0;
   let skipped = 0;
@@ -113,6 +115,7 @@ async function main(): Promise<void> {
       );
       await writeFile(join(outDir, `${funnelId}.json`), JSON.stringify(campaign, null, 2), 'utf8');
       written++;
+      normalized.push(campaign);
 
       for (const warning of campaign.warnings) allWarnings.push(`${funnelId}: ${warning}`);
       for (const sequence of campaign.sequences) {
@@ -149,6 +152,34 @@ async function main(): Promise<void> {
     );
   }
   console.log(`  output: ${outDir}\n`);
+
+  // --funnel normalises one campaign for iteration; a one-campaign graph would
+  // overwrite the account's graph.json with a near-empty one.
+  if (args.funnelId !== null) {
+    console.log('  (graph skipped — --funnel normalises a single campaign)\n');
+    return;
+  }
+
+  const graph = buildGraph(normalized);
+  const graphPath = join('artifacts', args.app, 'graph.json');
+  await writeFile(graphPath, JSON.stringify(graph, null, 2), 'utf8');
+
+  const count = (values: string[]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const value of values) out[value] = (out[value] ?? 0) + 1;
+    return out;
+  };
+
+  console.log(`[${args.app}] graph: ${graph.entities.length} entities, ${graph.edges.length} edges`);
+  console.log(`  entities: ${JSON.stringify(count(graph.entities.map((e) => e.kind)))}`);
+  console.log(`  edges:    ${JSON.stringify(count(graph.edges.map((e) => e.kind)))}`);
+  console.log(`  unreachable campaigns:   ${graph.findings.unreachableCampaigns.length}`);
+  console.log(`  tags applied by nobody:  ${graph.findings.tagsAppliedByNobody.length}`);
+  console.log(`  tags nobody listens for: ${graph.findings.tagsNobodyListensFor.length}`);
+  console.log(`  shared emails:           ${graph.findings.sharedEmails.length}`);
+  console.log(`  duplicate tag appliers:  ${graph.findings.duplicateTagAppliers.length}`);
+  for (const warning of graph.warnings) console.log(`  warning: ${warning}`);
+  console.log(`  output: ${graphPath}\n`);
 }
 
 await main();
