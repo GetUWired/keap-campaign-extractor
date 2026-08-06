@@ -1,10 +1,8 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { campaignDirFor, normalizeAppName, normalizeFunnelId, verifyIdentity } from '../app.js';
+import { normalizeAppName, normalizeFunnelId } from '../app.js';
 import { closeSession, openSession } from '../auth/session.js';
-import { extractCampaign } from '../extract/campaign.js';
-import { fetchDecision } from '../extract/decision.js';
-import { parseCells, parseIdentity } from '../parse/cells.js';
+import { extractOne } from '../extract/campaignRun.js';
 
 /** Recorded in keap-campaign-extractor-handoff.md sections 2 and 8. Informational only. */
 const BASELINES: Record<string, { chars: number; cells: number }> = {
@@ -70,99 +68,40 @@ async function main(): Promise<void> {
 
   try {
     const page = await session.context.newPage();
-    const campaign = await extractCampaign(page, session.baseUrl, args.funnelId);
+    const result = await extractOne(session, page, args.app, args.funnelId);
 
-    // Verify BEFORE creating any directory. A refused run must leave nothing
-    // behind — an empty client folder is exactly the confusion this prevents.
-    const identity = parseIdentity(campaign.draftXml);
-    const check = verifyIdentity({ app: args.app, funnelId: args.funnelId }, identity);
-    for (const warning of check.warnings) console.log(`  warning: ${warning}`);
-    if (!check.ok) {
-      for (const error of check.errors) console.error(`  ${error}`);
-      fail('identity check failed — nothing was written');
-      return;
-    }
-
-    const inventory = parseCells(campaign.draftXml);
-    const outDir = campaignDirFor(args.app, args.funnelId);
-    const decisionsDir = join(outDir, 'decisions');
-    // Clear prior decision output first. A stale .attempt-N.html from a failed
-    // run sitting beside a successful .html reads as though both happened.
-    await rm(decisionsDir, { recursive: true, force: true });
-    await mkdir(decisionsDir, { recursive: true });
-
-    await writeFile(join(outDir, 'draft.xml'), campaign.draftXml, 'utf8');
-    await writeFile(join(outDir, 'publish.xml'), campaign.publishXml, 'utf8');
-
-    const { draftXml, publishXml, ...meta } = campaign;
-    await writeFile(
-      join(outDir, 'meta.json'),
-      JSON.stringify(
-        {
-          appName: identity.appName ?? args.app,
-          ...meta,
-          publishXmlLength: publishXml.length,
-          neverPublished: publishXml.length === 0,
-          inventory,
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
-
-    console.log(
-      `\n[${args.app}] campaign ${args.funnelId} — "${campaign.funnelName ?? '(no name)'}"`,
-    );
+    console.log(`\n[${args.app}] campaign ${args.funnelId} — "${result.funnelName ?? '(no name)'}"`);
 
     const baseline = BASELINES[args.funnelId];
-    const cellCount = inventory.cellCount;
+    const cellCount = result.inventory.cellCount;
     if (baseline) {
       console.log(
-        `  draftXml: ${draftXml.length} chars / ${cellCount} mxCell ` +
+        `  draftXml: ${result.draftXmlLength} chars / ${cellCount} mxCell ` +
           `(handoff baseline ${baseline.chars} / ${baseline.cells}; ` +
-          `delta ${draftXml.length - baseline.chars} chars, ${cellCount - baseline.cells} cells)`,
+          `delta ${result.draftXmlLength - baseline.chars} chars, ${cellCount - baseline.cells} cells)`,
       );
     } else {
-      console.log(`  draftXml: ${draftXml.length} chars / ${cellCount} mxCell (no baseline)`);
+      console.log(`  draftXml: ${result.draftXmlLength} chars / ${cellCount} mxCell (no baseline)`);
     }
 
-    console.log(`  published: ${publishXml.length === 0 ? 'never' : `${publishXml.length} chars`}`);
-    console.log(`  styles: ${JSON.stringify(inventory.styleCounts)}`);
-    for (const warning of inventory.warnings) console.log(`  warning: ${warning}`);
+    console.log(
+      `  published: ${result.publishXmlLength === 0 ? 'never' : `${result.publishXmlLength} chars`}`,
+    );
+    console.log(`  styles: ${JSON.stringify(result.inventory.styleCounts)}`);
+    for (const warning of result.inventory.warnings) console.log(`  warning: ${warning}`);
 
-    for (const cell of inventory.decisions) {
-      const result = await fetchDecision(session.context, session.baseUrl, cell);
-
-      if (result.html && result.criteria) {
-        await writeFile(join(decisionsDir, `${cell.cellId}.html`), result.html, 'utf8');
-        await writeFile(
-          join(decisionsDir, `${cell.cellId}.json`),
-          JSON.stringify(result.criteria, null, 2),
-          'utf8',
-        );
-        const hitIndex = result.attempts.findIndex((a) => a.hit);
-        console.log(
-          `  decision ${cell.cellId}: HIT on candidate ${hitIndex + 1} — ` +
-            `${result.criteria.wrappers.length} branch(es)`,
-        );
-        for (const warning of result.criteria.warnings) console.log(`    warning: ${warning}`);
+    for (const decision of result.decisions) {
+      if (decision.hit) {
+        console.log(`  decision ${decision.cellId}: HIT — ${decision.branches} branch(es)`);
+        for (const warning of decision.warnings) console.log(`    warning: ${warning}`);
       } else {
         failed = true;
-        console.log(`  decision ${cell.cellId}: MISS on all ${result.attempts.length} candidates`);
-        for (const [i, attempt] of result.attempts.entries()) {
-          console.log(`    [${i + 1}] ${attempt.status} ${attempt.bytes}B ${attempt.url}`);
-          await writeFile(
-            join(decisionsDir, `${cell.cellId}.attempt-${i + 1}.html`),
-            result.missBodies[i] ?? '',
-            'utf8',
-          );
-        }
+        console.log(`  decision ${decision.cellId}: MISS on all ${decision.attempts} candidates`);
       }
     }
 
     await writeFile(
-      join(outDir, 'requests.log.json'),
+      join(result.outDir, 'requests.log.json'),
       JSON.stringify(session.guard, null, 2),
       'utf8',
     );
@@ -172,7 +111,7 @@ async function main(): Promise<void> {
       `\n  requests: ${session.guard.allowed.length} allowed, ` +
         `${session.guard.blocked.length} blocked (${nonGet.length} non-GET)`,
     );
-    console.log(`  artifacts: ${outDir}\n`);
+    console.log(`  artifacts: ${result.outDir}\n`);
   } catch (error) {
     failed = true;
     console.error(`\nspike failed: ${error instanceof Error ? error.message : String(error)}\n`);
