@@ -1,3 +1,4 @@
+import type { ImportProvenance } from '../app.js';
 import { parseIdentity } from '../parse/cells.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
 import {
@@ -72,6 +73,12 @@ export interface NormalizedCampaign {
   orphans: string[];
   /** Cell ids nobody ever filled in — the incompleteness Keap refuses to publish. */
   unconfigured: string[];
+  /**
+   * Set when this campaign was published into the account from another Keap app.
+   * Its draftXml keeps the originating app and id forever, so `appName` here
+   * names where it came from rather than where it lives.
+   */
+  importedFrom?: ImportProvenance;
   styleCounts: Record<string, number>;
   warnings: string[];
 }

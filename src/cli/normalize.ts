@@ -97,13 +97,16 @@ async function main(): Promise<void> {
       // The display name is not in draftXml — it comes from the #editor data
       // attribute, which the extractor stored in meta.json.
       let funnelName: string | null = null;
+      let importedFrom: { appName: string; funnelId: string } | undefined;
       const metaPath = join(dir, 'meta.json');
       if (existsSync(metaPath)) {
         try {
           const meta = JSON.parse(await readFile(metaPath, 'utf8')) as {
             funnelName?: string | null;
+            importedFrom?: { appName: string; funnelId: string };
           };
           funnelName = meta.funnelName ?? null;
+          importedFrom = meta.importedFrom;
         } catch {
           allWarnings.push(`${funnelId}: meta.json unreadable; name left null`);
         }
@@ -116,6 +119,8 @@ async function main(): Promise<void> {
         funnelName,
         funnelId,
       );
+      // Provenance lives in meta.json, which normalizeCampaign never reads.
+      if (importedFrom !== undefined) campaign.importedFrom = importedFrom;
       await writeFile(join(outDir, `${funnelId}.json`), JSON.stringify(campaign, null, 2), 'utf8');
       written++;
       normalized.push(campaign);

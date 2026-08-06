@@ -126,3 +126,51 @@ describe('verifyIdentity', () => {
     expect(result.warnings).toHaveLength(2);
   });
 });
+
+describe('verifyIdentity and imported campaigns', () => {
+  const expected = { app: 'se232', funnelId: '12789' };
+
+  it('accepts a campaign imported from another Keap app', () => {
+    // Campaign publishing bakes the originating app and its funnelId into
+    // draftXml permanently. The importing account assigns its own id, so both
+    // markers differ — se232's campaign 12789 says mrz166 / 18.
+    const result = verifyIdentity(expected, { appName: 'mrz166', funnelId: '18' });
+    expect(result.ok).toBe(true);
+    expect(result.importedFrom).toEqual({ appName: 'mrz166', funnelId: '18' });
+  });
+
+  it('records the import as a warning rather than passing silently', () => {
+    const result = verifyIdentity(expected, { appName: 'mrz166', funnelId: '18' });
+    expect(result.warnings.some((w) => /imported from "mrz166"/.test(w))).toBe(true);
+  });
+
+  it('still refuses a wrong-host run, where the funnelId matches', () => {
+    // The section 8 scenario: a session for one account pointed at another's
+    // host. You ask for funnel 12789 and get funnel 12789 from the wrong app,
+    // so the ids agree and only the app differs. That must keep failing.
+    const result = verifyIdentity(expected, { appName: 'jordan', funnelId: '12789' });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => /app mismatch/.test(e))).toBe(true);
+    expect(result.importedFrom).toBeUndefined();
+  });
+
+  it('still refuses a funnel mismatch within the right app', () => {
+    // Same app, wrong campaign — a routing bug, not an import.
+    const result = verifyIdentity(expected, { appName: 'se232', funnelId: '99' });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => /funnel mismatch/.test(e))).toBe(true);
+  });
+
+  it('reports no import when both markers agree', () => {
+    const result = verifyIdentity(expected, { appName: 'se232', funnelId: '12789' });
+    expect(result.ok).toBe(true);
+    expect(result.importedFrom).toBeUndefined();
+  });
+
+  it('does not treat a missing appName as an import', () => {
+    // Absent is weaker evidence, not contradictory evidence.
+    const result = verifyIdentity(expected, { appName: null, funnelId: '18' });
+    expect(result.ok).toBe(false);
+    expect(result.importedFrom).toBeUndefined();
+  });
+});
