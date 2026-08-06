@@ -187,3 +187,29 @@ describe('normalizeCampaign against campaign 987', () => {
     expect(c.warnings.filter((w) => /undocumented node style/.test(w))).toEqual([]);
   });
 });
+
+describe('normalizeCampaign funnelId', () => {
+  it('prefers the caller-supplied funnelId over the parsed one', () => {
+    const c = normalizeCampaign(c584, '', {}, null, '584');
+    expect(c.funnelId).toBe('584');
+    expect(c.warnings.filter((w) => /funnelId/.test(w))).toEqual([]);
+  });
+
+  it('supplies a funnelId for a draft that carries none', () => {
+    // 50 of 170 campaigns have no cell carrying appName, so parseIdentity
+    // returns null and the campaign would otherwise become "campaign:null".
+    const anonymous = c584.replace(/appName="[^"]*"/g, '');
+    expect(normalizeCampaign(anonymous, '', {}).funnelId).toBeNull();
+    expect(normalizeCampaign(anonymous, '', {}, null, '584').funnelId).toBe('584');
+  });
+
+  it('warns when the directory disagrees with the draft', () => {
+    const c = normalizeCampaign(c584, '', {}, null, '999');
+    expect(c.funnelId).toBe('999');
+    expect(c.warnings.some((w) => /funnelId mismatch.*999.*584/.test(w))).toBe(true);
+  });
+
+  it('falls back to the parsed funnelId when the caller supplies none', () => {
+    expect(normalizeCampaign(c584, '', {}).funnelId).toBe('584');
+  });
+});

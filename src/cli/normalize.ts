@@ -104,7 +104,13 @@ async function main(): Promise<void> {
         }
       }
 
-      const campaign = normalizeCampaign(draftXml, publishXml, await loadCriteria(dir), funnelName);
+      const campaign = normalizeCampaign(
+        draftXml,
+        publishXml,
+        await loadCriteria(dir),
+        funnelName,
+        funnelId,
+      );
       await writeFile(join(outDir, `${funnelId}.json`), JSON.stringify(campaign, null, 2), 'utf8');
       written++;
 

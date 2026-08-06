@@ -120,19 +120,32 @@ export function orderSteps(steps: NormalizedNode[], edges: RawEdge[]): StepOrder
 }
 
 /**
- * `funnelName` is passed in rather than parsed: the campaign's display name is
- * not in draftXml at all. It comes from the #editor data attribute, which the
- * extractor already stored in meta.json.
+ * `funnelName` and `funnelId` are passed in rather than parsed.
+ *
+ * The display name is not in draftXml at all — it comes from the #editor data
+ * attribute, which the extractor stored in meta.json. `funnelId` is in the XML
+ * but only on a cell that also carries `appName`, and 50 of the 170 campaigns
+ * in the corpus have no such cell. The directory an artifact was filed under is
+ * authoritative: extraction fetched by that id, and in all 120 cases where the
+ * XML does carry one, the two agree.
  */
 export function normalizeCampaign(
   draftXml: string,
   publishXml: string,
   criteriaByCellId: Record<string, DecisionCriteria>,
   funnelName: string | null = null,
+  funnelId: string | null = null,
 ): NormalizedCampaign {
   const graph: ParsedGraph = parseNodes(draftXml);
   const identity = parseIdentity(draftXml);
   const warnings = [...graph.warnings];
+
+  if (funnelId !== null && identity.funnelId !== null && funnelId !== identity.funnelId) {
+    warnings.push(
+      `funnelId mismatch: caller says ${funnelId}, draftXml says ${identity.funnelId} — ` +
+        `using ${funnelId}`,
+    );
+  }
 
   for (const style of Object.keys(graph.styleCounts)) {
     if (!KNOWN_STYLES.has(style)) {
@@ -192,7 +205,7 @@ export function normalizeCampaign(
     .map((n) => n.cellId);
 
   return {
-    funnelId: identity.funnelId,
+    funnelId: funnelId ?? identity.funnelId,
     appName: identity.appName,
     name: funnelName,
     published: publishXml.length > 0,
