@@ -172,18 +172,40 @@ export function computeFindings(
       .map((id) => [id, sortIds(grouped.get(id) ?? [])]);
 
   // Both are only meaningful against a catalogue: without one, "not found" and
-  // "not looked up" are the same observation, and reporting them would be a
-  // confident wrong answer about every entity in the account.
+  // "not looked up" are the same observation.
+  //
+  // That distinction also has to hold PER KIND. A kind the API could not serve
+  // (landing pages have no endpoint) or whose ids live in a different space
+  // from the ones campaigns reference (the email template library shares no id
+  // with any marketingEmailId) yields no matches at all — and reporting its
+  // every reference as "broken" would claim 310 campaigns point at deleted
+  // records when the truth is that nothing was ever looked up. So a kind counts
+  // only once it has proved comparable by matching at least one id.
   const catalogued = new Set((catalogue?.entities ?? []).map((entry) => entry.id));
   const referenced = new Set(edges.filter((edge) => !edge.derived).map((edge) => edge.to));
+
+  const kindOfId = (id: string): string => id.slice(0, id.indexOf(':'));
+  const comparable = new Set<string>();
+  for (const id of referenced) {
+    if (catalogued.has(id)) comparable.add(kindOfId(id));
+  }
 
   const entitiesNotFound =
     catalogue === undefined
       ? []
-      : sortIds([...referenced].filter((id) => !id.startsWith('campaign:') && !catalogued.has(id)));
+      : sortIds(
+          [...referenced].filter(
+            (id) =>
+              !id.startsWith('campaign:') && comparable.has(kindOfId(id)) && !catalogued.has(id),
+          ),
+        );
 
   const unusedEntities =
-    catalogue === undefined ? [] : sortIds([...catalogued].filter((id) => !referenced.has(id)));
+    catalogue === undefined
+      ? []
+      : sortIds(
+          [...catalogued].filter((id) => comparable.has(kindOfId(id)) && !referenced.has(id)),
+        );
 
   return {
     unreachableCampaigns,

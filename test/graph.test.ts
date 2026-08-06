@@ -487,23 +487,35 @@ describe('buildGraph with a catalogue', () => {
 
 describe('catalogue findings', () => {
   it('reports a referenced entity the catalogue does not contain', () => {
-    // A campaign pointing at a deleted email is a broken campaign.
+    // A campaign pointing at a deleted email is a broken campaign — but only
+    // once the kind has proved comparable by matching at least one id.
     const graph = buildGraph(
       [
         makeCampaign({
           funnelId: '16',
-          sequences: [makeSequence({ steps: [emailStep('25', '1200')] })],
+          sequences: [makeSequence({ steps: [emailStep('25', '1200'), emailStep('26', '1300')] })],
         }),
       ],
-      catalogue([{ id: 'email:9999', kind: 'email', name: 'Something else', extra: {} }]),
+      catalogue([
+        { id: 'email:1300', kind: 'email', name: 'Still here', extra: {} },
+        { id: 'email:9999', kind: 'email', name: 'Something else', extra: {} },
+      ]),
     );
     expect(graph.findings.entitiesNotFound).toEqual(['email:1200']);
   });
 
   it('reports a catalogue entity nothing references', () => {
     const graph = buildGraph(
-      [makeCampaign({ funnelId: '16' })],
-      catalogue([{ id: 'tag:500', kind: 'tag', name: 'Unused', extra: {} }]),
+      [
+        makeCampaign({
+          funnelId: '16',
+          sequences: [makeSequence({ steps: [applyStep('10', ['346'])] })],
+        }),
+      ],
+      catalogue([
+        { id: 'tag:346', kind: 'tag', name: 'In use', extra: {} },
+        { id: 'tag:500', kind: 'tag', name: 'Unused', extra: {} },
+      ]),
     );
     expect(graph.findings.unusedEntities).toEqual(['tag:500']);
   });
@@ -524,5 +536,54 @@ describe('catalogue findings', () => {
     // Campaigns come from the artifact directory, not the catalogue.
     const graph = buildGraph([makeCampaign({ funnelId: '16' })], catalogue([]));
     expect(graph.findings.entitiesNotFound).toEqual([]);
+  });
+});
+
+describe('findings only claim what was actually looked up', () => {
+  const webformGoal = (cellId: string, id: string) =>
+    makeNode({
+      cellId,
+      style: 'newsletterRequest',
+      references: { tagIds: [], tagCategoryIds: [], webformId: id },
+    });
+
+  it('never calls a reference broken for a kind the catalogue could not compare', () => {
+    // Landing pages have no endpoint and the email template library shares no
+    // id with any marketingEmailId. Reporting those as "broken" would claim the
+    // campaigns point at deleted records, when nothing was ever looked up.
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '16',
+          goals: [webformGoal('2', '681')],
+          sequences: [makeSequence({ steps: [emailStep('25', '1200')] })],
+        }),
+      ],
+      // The catalogue covers webforms and matches one; it says nothing about
+      // any email that this campaign references.
+      catalogue([
+        { id: 'webform:681', kind: 'webform', name: 'Signup', extra: {} },
+        { id: 'email:150', kind: 'email', name: 'A template', extra: {} },
+      ]),
+    );
+    expect(graph.findings.entitiesNotFound).toEqual([]);
+    expect(graph.findings.unusedEntities).toEqual([]);
+  });
+
+  it('still reports a genuinely deleted entity for a kind that did compare', () => {
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '16',
+          goals: [webformGoal('2', '681'), webformGoal('3', '999')],
+        }),
+      ],
+      catalogue([
+        { id: 'webform:681', kind: 'webform', name: 'Signup', extra: {} },
+        { id: 'webform:777', kind: 'webform', name: 'Never used', extra: {} },
+      ]),
+    );
+    expect(graph.findings.entitiesNotFound).toEqual(['webform:999']);
+    expect(graph.findings.unusedEntities).toEqual(['webform:777']);
   });
 });
