@@ -66,7 +66,7 @@ describe('describeNode', () => {
 
   it('says a tag step is unconfigured when it references nothing', () => {
     expect(describeNode(node('tag', { config: { isApply: 'true' } }), ctx())).toBe(
-      'Tag applied — not configured',
+      'Apply/Remove Tags — not configured',
     );
   });
 
@@ -80,12 +80,12 @@ describe('describeNode', () => {
   it('prefers the catalog email name over "Untitled Email"', () => {
     // 98 email steps are literally named "Untitled Email".
     const step = node('email', { name: 'Untitled Email', refs: { marketingEmailId: '1200' } });
-    expect(describeNode(step, ctx([['email:1200', 'Welcome 1']]))).toBe('Email — "Welcome 1"');
+    expect(describeNode(step, ctx([['email:1200', 'Welcome 1']]))).toBe('Email (Legacy) — "Welcome 1"');
   });
 
   it('keeps a real email name when the operator set one', () => {
     const step = node('email', { name: 'Tip 1', refs: { marketingEmailId: '1200' } });
-    expect(describeNode(step, ctx([['email:1200', 'Welcome 1']]))).toBe('Email — "Tip 1"');
+    expect(describeNode(step, ctx([['email:1200', 'Welcome 1']]))).toBe('Email (Legacy) — "Tip 1"');
   });
 
   it('describes a node with no name by its type alone', () => {
@@ -96,7 +96,7 @@ describe('describeNode', () => {
     const goal = node('newsletterRequest', { name: 'Request E-Book', refs: { webformId: '681' } });
     const out = describeNode(goal, ctx([['webform:681', 'E-Book form']]));
     expect(out).not.toContain('newsletterRequest');
-    expect(out).toBe('Web form submitted — "Request E-Book" (E-Book form)');
+    expect(out).toBe('Web Form submitted — "Request E-Book" (E-Book form)');
   });
 });
 
@@ -146,7 +146,7 @@ describe('names arriving from the catalog', () => {
       refs: { webformId: '681' },
     });
     const out = describeNode(goal, ctx());
-    expect(out).toBe('Web form submitted — Request our Series "How to sell"');
+    expect(out).toBe('Web Form submitted — Request our Series "How to sell"');
   });
 });
 
@@ -157,18 +157,18 @@ describe('tagApplied goals', () => {
     // the same trigger.
     const goal = node('tagApplied', { name: 'Approved', refs: { tagIds: ['1019'] } });
     expect(describeNode(goal, ctx([['tag:1019', '0 - 50 New Contacts']]))).toBe(
-      'Tag applied (goal) — "Approved" (waits for "0 - 50 New Contacts")',
+      'Tag applied — "Approved" (waits for "0 - 50 New Contacts")',
     );
   });
 
   it('falls back to the tag id when the catalog cannot name it', () => {
     const goal = node('tagApplied', { name: 'Approved', refs: { tagIds: ['1019'] } });
-    expect(describeNode(goal, ctx())).toBe('Tag applied (goal) — "Approved" (waits for tag 1019)');
+    expect(describeNode(goal, ctx())).toBe('Tag applied — "Approved" (waits for tag 1019)');
   });
 
   it('says so when it waits for nothing', () => {
     expect(describeNode(node('tagApplied', { name: 'Approved' }), ctx())).toBe(
-      'Tag applied (goal) — "Approved" (not configured)',
+      'Tag applied — "Approved" (not configured)',
     );
   });
 });
@@ -179,14 +179,14 @@ describe('redundant references', () => {
     // as: Web form submitted — "Sign up" (Sign up).
     const goal = node('newsletterRequest', { name: 'Sign up', refs: { webformId: '681' } });
     expect(describeNode(goal, ctx([['webform:681', 'Sign up']]))).toBe(
-      'Web form submitted — "Sign up"',
+      'Web Form submitted — "Sign up"',
     );
   });
 
   it('still shows it when the two genuinely differ', () => {
     const goal = node('newsletterRequest', { name: 'Request E-Book', refs: { webformId: '681' } });
     expect(describeNode(goal, ctx([['webform:681', 'E-Book form']]))).toBe(
-      'Web form submitted — "Request E-Book" (E-Book form)',
+      'Web Form submitted — "Request E-Book" (E-Book form)',
     );
   });
 });

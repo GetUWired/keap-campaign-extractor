@@ -1,115 +1,107 @@
 import type { NormalizedNode } from '../normalize/nodes.js';
 
 /**
- * Styles whose meaning depends on what they reference, not on the style.
+ * What each tool is called, using the wording on the campaign-builder toolbars.
  *
- * `newsletterRequest` is a web form submission 106 times, a landing page 20
- * times and an internal form 7 times across this corpus. The legacy style name
- * describes none of them.
+ * These are styles that ARE tools — a reader picking one from the palette gets
+ * exactly this. Keap marks generations itself, with a NEW badge or a "(Legacy)"
+ * suffix, and that distinction is kept: for a migration, legacy-builder content
+ * is precisely what needs rebuilding, so collapsing it would hide the work.
  */
-export const SUBMISSION_STYLES = new Set(['newsletterRequest', 'requestInfo']);
-
-/**
- * What each style is called in output.
- *
- * Wording comes from Keap's own default names wherever possible — the most
- * common `name` across nodes of that style. Several styles collapse together
- * because Keap has shipped multiple builders over the years and the generation
- * is an implementation detail no reader needs.
- *
- * CORRECT THIS TABLE ON SIGHT if you know the builder. Nothing else in the
- * renderer depends on the wording, and a style missing here falls through to
- * its raw name rather than being guessed at.
- *
- * Known-unsettled: stageMove, makeCall, indicateInterest and fileDownload all
- * carry an optional stageId that most instances leave unset — 7 of 82 for
- * indicateInterest, 2 of 13 for fileDownload. They may be one goal type in the
- * current UI or four; until that is answered they stay distinct, because
- * calling them all "stage move" would misdescribe the majority that move no
- * stage.
- */
-export const STYLE_LABELS: Record<string, string> = {
-  // Email — three builder generations, one meaning
-  email: 'Email',
-  bardEmail: 'Email',
-  unlayerEmail: 'Email',
-  emailConfirm: 'Confirmation email',
-  confirmEmail: 'Email confirmed',
-  // Landing pages — two builder generations
-  landingPage: 'Landing page submitted',
-  convrrtLandingPage: 'Landing page submitted',
+export const TOOL_LABELS: Record<string, string> = {
   // Timers
-  timerDelay: 'Wait',
-  timerDate: 'Wait until date',
-  timerContact: 'Wait until contact date',
-  // Tags and notes
-  tag: 'Tag applied',
-  tagApplied: 'Tag applied (goal)',
-  notes: 'Note',
-  note: 'Apply note',
-  noteApplied: 'Note applied',
-  // Actions
-  http: 'Send HTTP Post',
+  timerDelay: 'Delay Timer',
+  timerDate: 'Date Timer',
+  timerContact: 'Field Timer',
+  // Communications — the toolbar shows three generations
+  unlayerEmail: 'Email message',
+  email: 'Email (Legacy)',
+  bardEmail: 'Email (Legacy)',
+  letter: 'Letter',
+  automatedSms: 'Text message',
+  voice: 'Voice broadcast (Legacy)',
+  fax: 'Fax (Legacy)',
+  // Process
+  tag: 'Apply/Remove Tags',
+  note: 'Apply Note',
   task: 'Create Task',
-  taskComplete: 'Task completed',
-  fulfillment: 'Fulfillment List',
-  actionSet: 'Apply Action Set',
   fieldValue: 'Set Field Value',
   assignOwner: 'Assign an Owner',
   opportunity: 'Create Opportunity',
+  stageMove: 'Move Opportunity',
+  fulfillment: 'Fulfillment List',
   createOrder: 'Create Order',
+  cancelSubscription: 'Cancel Subscription',
+  http: 'Send HTTP Post',
+  httpRequest: 'Send HTTP Request',
   addToSequence: 'Add to Sequence',
-  cancelSubscription: 'Cancel subscription',
-  customerHub: 'Add to CustomerHub',
-  letter: 'Letter',
-  voice: 'Voice broadcast',
-  fax: 'Fax',
-  // Goals
-  internalForm: 'Internal form submitted',
-  purchaseSuccess: 'Purchase made',
-  failedPurchase: 'Purchase failed',
-  eventRequest: 'Event registration',
-  eventAttend: 'Event attended',
-  liveEvent: 'Live event',
-  meetingRequest: 'Appointment scheduled',
-  meetingAttend: 'Appointment attended',
-  linkClick: 'Link clicked',
-  fileDownload: 'File downloaded',
-  scoreAchieved: 'Lead score reached',
-  websiteTrigger: 'Web page automation',
-  website: 'Website',
-  api: 'API',
-  blog: 'Blog',
-  facebook: 'Facebook',
-  facebookParticipate: 'Facebook promotion',
-  twitter: 'Twitter',
-  radioAd: 'Radio ad',
-  existingList: 'Existing list',
-  goal: 'Goal',
+  actionSet: 'Action Set (Legacy)',
+  customerHub: 'Add to CustomerHub (Legacy)',
+  // Sequences and other canvas items
+  emailConfirm: 'Email Confirmation',
   decision: 'Decision',
-  // The unsettled stageId group — see the note above
-  stageMove: 'Opportunity stage moved',
-  makeCall: 'Call made',
-  indicateInterest: 'Interest indicated',
+  notes: 'Notes',
+  // Goals with no entity reference — the trigger IS the tool
+  tagApplied: 'Tag applied',
+  linkClick: 'Email Link clicked',
+  websiteTrigger: 'Web Page automation',
+  taskComplete: 'Task completed',
+  noteApplied: 'Note applied',
+  scoreAchieved: 'Lead Score achieved',
+  failedPurchase: 'Failed Purchase',
+  api: 'API',
 };
 
-/** Which entity a submission-style node actually points at. */
-function submissionLabel(node: NormalizedNode): string {
-  const { references } = node;
-  if (typeof references.webformId === 'string') return 'Web form submitted';
-  if (typeof references.landingPageId === 'string') return 'Landing page submitted';
-  if (typeof references.internalFormId === 'string') return 'Internal form submitted';
-  return 'Form submitted (unconfigured)';
+/**
+ * References that identify the mechanism, in priority order.
+ *
+ * This is the heart of the rework. Many `style` values are not tools at all —
+ * they are preset labels from an older palette, describing why someone added
+ * the goal rather than what it does. `eventRequest` carries a `landingPageId`
+ * 16 times: it is a landing-page goal that somebody labelled "Register for an
+ * event". `makeCall` carries a `stageId` 9 times: an opportunity stage move.
+ *
+ * Deriving the tool from what the node points at is both more accurate and
+ * smaller than a hand-maintained table of every historical palette entry — and
+ * it cannot go stale when Keap retires a label.
+ */
+export const REFERENCE_TOOLS: [string, string][] = [
+  ['unlayerLandingPageId', 'Landing Page'],
+  ['landingPageId', 'Landing Page submitted'],
+  ['webformId', 'Web Form submitted'],
+  ['smartFormInstanceId', 'Web Form submitted'],
+  ['internalFormId', 'Internal Form submitted'],
+  ['purchaseId', 'Product purchased'],
+  ['stageId', 'Opportunity Stage moved'],
+];
+
+/** A reference value, whether it arrives as a scalar attribute or an array. */
+function hasReference(node: NormalizedNode, attribute: string): boolean {
+  if (typeof node.references[attribute] === 'string') return true;
+  // 361 purchase goals in se232 carry their products in <Array as="purchaseId">
+  // and none carry the scalar, so reading attributes alone misses them all.
+  const list = node.lists[attribute];
+  return Array.isArray(list) && list.length > 0;
 }
 
 /**
- * What this node does, in words a Keap operator would recognize.
+ * What this node does, in the words the campaign builder uses.
  *
- * Takes a node rather than a style because one style can mean several things.
- * Never returns an internal style name for a style in the tables; an unknown
- * style returns its raw name so it is visibly odd and asks to be added.
+ * Style wins where the style is genuinely a tool. Otherwise the mechanism is
+ * read from what the node references, because a legacy style is a label rather
+ * than a tool. A node that is neither is unconfigured, and says so instead of
+ * being given an invented type.
  */
 export function typeLabel(node: NormalizedNode): string {
-  if (SUBMISSION_STYLES.has(node.style)) return submissionLabel(node);
-  return STYLE_LABELS[node.style] ?? node.style;
+  const tool = TOOL_LABELS[node.style];
+  if (tool !== undefined) return tool;
+
+  for (const [attribute, label] of REFERENCE_TOOLS) {
+    if (hasReference(node, attribute)) return label;
+  }
+  if (node.references.tagIds.length > 0) return 'Tag applied';
+
+  // Nothing to go on: no tool, no reference. Saying "Goal (unconfigured)" is
+  // honest; inventing a label from a retired palette entry would not be.
+  return node.style === 'goal' || node.parent === '1' ? 'Goal (unconfigured)' : node.style;
 }

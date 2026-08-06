@@ -1,74 +1,120 @@
 import { describe, expect, it } from 'vitest';
-import { STYLE_LABELS, typeLabel } from '../src/render/labels.js';
+import { TOOL_LABELS, typeLabel } from '../src/render/labels.js';
 import { makeNode } from './fixtures/graphFixtures.js';
 
-const node = (style: string, references: Record<string, string> = {}) =>
-  makeNode({ style, references: { tagIds: [], tagCategoryIds: [], ...references } });
+const node = (
+  style: string,
+  references: Record<string, string> = {},
+  lists: Record<string, string[]> = {},
+) =>
+  makeNode({ style, lists, references: { tagIds: [], tagCategoryIds: [], ...references } });
 
-describe('typeLabel', () => {
-  it('collapses every email builder generation to one label', () => {
-    // Keap has shipped several email builders over the years. The generation
-    // is an implementation detail; all three reference marketingEmailId.
-    for (const style of ['email', 'bardEmail', 'unlayerEmail']) {
-      expect(typeLabel(node(style, { marketingEmailId: '1200' })), style).toBe('Email');
-    }
-  });
-
-  it('collapses both landing page builders to one label', () => {
-    expect(typeLabel(node('landingPage', { landingPageId: '42' }))).toBe('Landing page submitted');
-    expect(typeLabel(node('convrrtLandingPage'))).toBe('Landing page submitted');
-  });
-
-  it('resolves a submission style by what it actually references', () => {
-    // newsletterRequest is a web form 106 times, a landing page 20 times and an
-    // internal form 7 times. The style alone cannot say which.
-    expect(typeLabel(node('newsletterRequest', { webformId: '681' }))).toBe('Web form submitted');
-    expect(typeLabel(node('newsletterRequest', { landingPageId: '42' }))).toBe(
-      'Landing page submitted',
-    );
-    expect(typeLabel(node('newsletterRequest', { internalFormId: '3' }))).toBe(
-      'Internal form submitted',
-    );
-  });
-
-  it('says so when a submission references nothing, rather than guessing', () => {
-    // 69 of 205 newsletterRequest nodes carry no reference at all.
-    expect(typeLabel(node('newsletterRequest'))).toBe('Form submitted (unconfigured)');
-  });
-
-  it('uses Keap own default wording for the plain cases', () => {
+describe('typeLabel — styles that are genuinely tools', () => {
+  it('uses the toolbar wording', () => {
+    expect(typeLabel(node('timerDelay'))).toBe('Delay Timer');
+    expect(typeLabel(node('tag'))).toBe('Apply/Remove Tags');
     expect(typeLabel(node('http'))).toBe('Send HTTP Post');
-    expect(typeLabel(node('task'))).toBe('Create Task');
-    expect(typeLabel(node('tag'))).toBe('Tag applied');
     expect(typeLabel(node('fulfillment'))).toBe('Fulfillment List');
   });
 
-  it('falls back to the raw style for anything unknown, so it asks to be added', () => {
-    expect(typeLabel(node('somethingKeapAddedLater'))).toBe('somethingKeapAddedLater');
+  it('keeps the generations Keap itself distinguishes', () => {
+    // The toolbar shows "Email message" with a NEW badge beside a separate
+    // "Email (Legacy)". For a migration that difference is the work, so
+    // collapsing them would hide it.
+    expect(typeLabel(node('unlayerEmail'))).toBe('Email message');
+    expect(typeLabel(node('email'))).toBe('Email (Legacy)');
+    expect(typeLabel(node('bardEmail'))).toBe('Email (Legacy)');
+    expect(typeLabel(node('http'))).toBe('Send HTTP Post');
+    expect(typeLabel(node('httpRequest'))).toBe('Send HTTP Request');
+    expect(typeLabel(node('actionSet'))).toBe('Action Set (Legacy)');
   });
 
-  it('never emits a legacy internal style name for a style it knows', () => {
-    const forbidden = ['newsletterRequest', 'indicateInterest', 'bardEmail', 'unlayerEmail'];
-    for (const style of forbidden) {
-      expect(typeLabel(node(style, { webformId: '1' })), style).not.toContain(style);
-    }
-  });
-
-  it('keeps the four stageId styles distinct until the UI question is settled', () => {
-    // Most instances leave stageId unset — 7 of 82 for indicateInterest, 2 of
-    // 13 for fileDownload — so calling them all "stage move" would misdescribe
-    // the majority.
-    const labels = ['stageMove', 'makeCall', 'indicateInterest', 'fileDownload'].map((s) =>
-      typeLabel(node(s)),
-    );
-    expect(new Set(labels).size).toBe(4);
-    expect(labels).not.toContain('indicateInterest');
+  it('lets a tag step stay a tag step even though it references tags', () => {
+    // Style must win here: the reference rule would otherwise call an
+    // apply-tag STEP a "Tag applied" GOAL.
+    const step = node('tag', {}, {});
+    step.references.tagIds = ['646'];
+    expect(typeLabel(step)).toBe('Apply/Remove Tags');
   });
 });
 
-describe('STYLE_LABELS', () => {
-  it('is a plain table anyone can correct without reading code', () => {
-    expect(STYLE_LABELS.http).toBe('Send HTTP Post');
-    expect(Object.values(STYLE_LABELS).every((v) => typeof v === 'string')).toBe(true);
+describe('typeLabel — legacy styles that are only labels', () => {
+  it('reads an event-request goal as the landing page it actually uses', () => {
+    // eventRequest carries a landingPageId 16 times across the two accounts.
+    // It is a landing-page goal somebody labelled "Register for an event".
+    expect(typeLabel(node('eventRequest', { landingPageId: '42' }))).toBe(
+      'Landing Page submitted',
+    );
+  });
+
+  it('reads a make-call goal as the opportunity stage move it actually is', () => {
+    expect(typeLabel(node('makeCall', { stageId: '7' }))).toBe('Opportunity Stage moved');
+  });
+
+  it('reads request-info by whichever form it points at', () => {
+    expect(typeLabel(node('requestInfo', { internalFormId: '3' }))).toBe(
+      'Internal Form submitted',
+    );
+    expect(typeLabel(node('requestInfo', { webformId: '681' }))).toBe('Web Form submitted');
+  });
+
+  it('reads newsletterRequest the same way, by reference not by name', () => {
+    expect(typeLabel(node('newsletterRequest', { webformId: '681' }))).toBe('Web Form submitted');
+    expect(typeLabel(node('newsletterRequest', { landingPageId: '42' }))).toBe(
+      'Landing Page submitted',
+    );
+  });
+
+  it('reads a goal carrying only tags as a tag goal', () => {
+    const goal = node('eventAttend');
+    goal.references.tagIds = ['646'];
+    expect(typeLabel(goal)).toBe('Tag applied');
+  });
+
+  it('says unconfigured rather than inventing a type for a retired label', () => {
+    // facebook, blog, twitter, radioAd and liveEvent carry no reference at all.
+    // There is no mechanism to name, and guessing one would be fiction.
+    for (const style of ['facebook', 'blog', 'twitter', 'radioAd', 'liveEvent']) {
+      expect(typeLabel(node(style)), style).toBe('Goal (unconfigured)');
+    }
+  });
+});
+
+describe('typeLabel — array-valued references', () => {
+  it('reads a purchase goal whose products arrive as an array', () => {
+    // 361 purchase goals in se232 carry <Array as="purchaseId"> and NONE carry
+    // the scalar. Reading attributes alone mislabels every one of them.
+    expect(typeLabel(node('purchaseSuccess', {}, { purchaseId: ['1753'] }))).toBe(
+      'Product purchased',
+    );
+  });
+
+  it('still reads the scalar form, which is what jordan uses', () => {
+    expect(typeLabel(node('purchaseSuccess', { purchaseId: '7' }))).toBe('Product purchased');
+  });
+
+  it('ignores an empty array rather than treating it as a reference', () => {
+    expect(typeLabel(node('purchaseSuccess', {}, { purchaseId: [] }))).toBe('Goal (unconfigured)');
+  });
+});
+
+describe('typeLabel — the newer builders', () => {
+  it('distinguishes the new landing page builder from the old', () => {
+    expect(typeLabel(node('unlayerLandingPage', { unlayerLandingPageId: '9' }))).toBe(
+      'Landing Page',
+    );
+    expect(typeLabel(node('landingPage', { landingPageId: '42' }))).toBe('Landing Page submitted');
+  });
+
+  it('names the SMS channel', () => {
+    expect(typeLabel(node('automatedSms'))).toBe('Text message');
+  });
+});
+
+describe('TOOL_LABELS', () => {
+  it('never contains an internal style name as its own label', () => {
+    for (const [style, label] of Object.entries(TOOL_LABELS)) {
+      expect(label, style).not.toBe(style);
+    }
   });
 });
