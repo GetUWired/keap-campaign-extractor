@@ -34,12 +34,17 @@ export interface EntityCatalogue {
  */
 export const KIND_CANDIDATES: { kind: EntityKind; paths: string[] }[] = [
   { kind: 'tag', paths: ['/crm/rest/v2/tags', '/crm/rest/v1/tags'] },
-  { kind: 'product', paths: ['/crm/rest/v1/products', '/crm/rest/v2/products'] },
-  { kind: 'user', paths: ['/crm/rest/v1/users', '/crm/rest/v2/users'] },
-  // /forms serves INTERNAL forms. Measured against the live account: it matched
-  // 6 of 16 internalFormId references and 0 of 113 webformId references. An
-  // earlier ordering let `webform` claim this endpoint first, which would have
-  // labelled 113 webforms from a set of 7 unrelated records.
+  { kind: 'product', paths: ['/crm/rest/v2/products', '/crm/rest/v1/products'] },
+  { kind: 'user', paths: ['/crm/rest/v2/users', '/crm/rest/v1/users'] },
+  { kind: 'webform', paths: ['/crm/rest/v2/webforms'] },
+  // The templates sub-resource, NOT /emails. The parent is sent-email history:
+  // a live run pulled 14,914 records from it against 250 referenced, and all 72
+  // named email steps disagreed with the record at their marketingEmailId.
+  // Campaign email content lives one level down.
+  { kind: 'email', paths: ['/crm/rest/v2/emails/templates'] },
+  // /forms serves INTERNAL forms — measured against the live account, it matched
+  // 6 of 16 internalFormId references and 0 of 113 webformId references. Public
+  // webforms have their own resource above.
   { kind: 'form', paths: ['/crm/rest/v1/forms', '/crm/rest/v2/forms'] },
 ];
 
@@ -50,17 +55,9 @@ export const KIND_CANDIDATES: { kind: EntityKind; paths: string[] }[] = [
  * already proven wrong costs requests and, worse, invites someone to "fix" the
  * gap by joining against data that does not mean what the id means.
  *
- * All three were measured against the live `jordan` account on 2026-08-06.
+ * Measured against the live `jordan` account on 2026-08-06.
  */
 export const UNSERVABLE_KINDS: Record<string, string> = {
-  email:
-    'the /emails resource is sent-email history, not campaign email templates — 14,914 records ' +
-    'against 250 referenced, ids spanning 1–30740, and all 72 named email steps disagreed with ' +
-    'the record sitting at their marketingEmailId. Joining it would attach a stranger’s ' +
-    'subject line to a campaign step. Closes handoff §14 Q9: the API cannot supply these.',
-  webform:
-    '/forms serves internal forms, matching 6 of 16 internalFormId references and 0 of 113 ' +
-    'webformId references. No webform resource was found.',
   landingPage:
     'no endpoint exists: /crm/rest/v2/landingPages and /crm/rest/v1/landingPages both 404.',
 };

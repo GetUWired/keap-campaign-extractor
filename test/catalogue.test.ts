@@ -70,7 +70,7 @@ describe('mapRecord', () => {
 
   it('offers candidate paths for every kind the API can actually serve', () => {
     const kinds = KIND_CANDIDATES.map((c) => c.kind);
-    for (const kind of ['tag', 'product', 'user', 'form']) {
+    for (const kind of ['tag', 'product', 'user', 'form', 'webform', 'email']) {
       expect(kinds, kind).toContain(kind);
     }
     for (const candidate of KIND_CANDIDATES) {
@@ -80,15 +80,24 @@ describe('mapRecord', () => {
 
   it('never probes a kind already proven unservable', () => {
     const kinds = KIND_CANDIDATES.map((c) => c.kind);
-    for (const kind of ['email', 'webform', 'landingPage']) {
-      expect(kinds, kind).not.toContain(kind);
-      expect(UNSERVABLE_KINDS[kind], kind).toBeTruthy();
-    }
+    expect(kinds).not.toContain('landingPage');
+    expect(UNSERVABLE_KINDS.landingPage).toBeTruthy();
   });
 
-  it('lets form claim /forms, since that is what the endpoint actually serves', () => {
-    // Measured: 6 of 16 internalFormId references matched, 0 of 113 webformId.
-    expect(KIND_CANDIDATES.find((c) => c.kind === 'form')?.paths).toContain('/crm/rest/v1/forms');
+  it('asks for email templates, never the sent-email parent', () => {
+    const paths = KIND_CANDIDATES.find((c) => c.kind === 'email')?.paths ?? [];
+    expect(paths).toEqual(['/crm/rest/v2/emails/templates']);
+    expect(paths.some((p) => /\/emails$/.test(p))).toBe(false);
+  });
+
+  it('separates public webforms from the internal forms /forms serves', () => {
+    // Measured: /forms matched 6 of 16 internalFormId references and 0 of 113
+    // webformId. They are different resources and must not share an endpoint.
+    const webform = KIND_CANDIDATES.find((c) => c.kind === 'webform')?.paths ?? [];
+    const form = KIND_CANDIDATES.find((c) => c.kind === 'form')?.paths ?? [];
+    expect(webform).toContain('/crm/rest/v2/webforms');
+    expect(form).toContain('/crm/rest/v1/forms');
+    expect(webform.filter((p) => form.includes(p))).toEqual([]);
   });
 });
 
@@ -197,12 +206,6 @@ describe('fetchCatalogue', () => {
   it('records the proven-unservable kinds without spending a request on them', async () => {
     const client = fakeClient({ ...profile, '/crm/rest/v1/tags': [{ id: 1, name: 'x' }] });
     const catalogue = await fetchCatalogue(client, 'jordan');
-    expect(catalogue.sources.email).toMatchObject({
-      unavailable: expect.stringContaining('sent-email history'),
-    });
-    expect(catalogue.sources.webform).toMatchObject({
-      unavailable: expect.stringContaining('internal forms'),
-    });
     expect(catalogue.sources.landingPage).toMatchObject({
       unavailable: expect.stringContaining('404'),
     });
@@ -230,11 +233,25 @@ describe('fetchCatalogue', () => {
     expect(catalogue.entities).toHaveLength(1);
   });
 
-  it('gives /forms to form, which is what that endpoint actually serves', () => {
-    const client = fakeClient({ ...profile, '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }] });
-    return fetchCatalogue(client, 'jordan').then((catalogue) => {
-      expect(catalogue.entities.map((e) => e.id)).toEqual(['form:3']);
+  it('keeps webforms and internal forms in separate id spaces', async () => {
+    const client = fakeClient({
+      ...profile,
+      '/crm/rest/v2/webforms': [{ id: 681, title: 'Newsletter signup' }],
+      '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }],
     });
+    const catalogue = await fetchCatalogue(client, 'jordan');
+    expect(catalogue.entities.map((e) => e.id).sort()).toEqual(['form:3', 'webform:681']);
+  });
+
+  it('maps an email template from the templates sub-resource', async () => {
+    const client = fakeClient({
+      ...profile,
+      '/crm/rest/v2/emails/templates': [{ id: 1200, title: 'Tip 1', subject: 'Your first tip' }],
+    });
+    const catalogue = await fetchCatalogue(client, 'jordan');
+    expect(catalogue.entities).toEqual([
+      { id: 'email:1200', kind: 'email', name: 'Tip 1', extra: { subject: 'Your first tip' } },
+    ]);
   });
 
   it('never mints a second entity from an endpoint another kind already claimed', async () => {

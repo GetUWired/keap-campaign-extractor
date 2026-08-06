@@ -20,19 +20,18 @@ export const ALLOWED_PATHS: RegExp[] = [
   /^\/crm\/rest\/v[12]\/products(?:\/|$)/,
   /^\/crm\/rest\/v[12]\/users(?:\/|$)/,
   /^\/crm\/rest\/v[12]\/forms(?:\/|$)/,
+  /^\/crm\/rest\/v[12]\/webforms(?:\/|$)/,
+  // Anchored on the sub-resource on purpose. `/emails` is sent-email history —
+  // a live run pulled 14,914 records of what went to which contact before that
+  // was understood. `/emails/templates` is the campaign email content that
+  // marketingEmailId actually points at. The parent stays refused; only the
+  // child is readable, and no pattern here can be widened to the parent by
+  // accident.
+  /^\/crm\/rest\/v[12]\/emails\/templates(?:\/|$)/,
   /^\/crm\/rest\/v[12]\/account\/profile(?:\/|$)/,
 ];
 
-/**
- * `/emails` is deliberately absent.
- *
- * It was allowlisted once, and the live run pulled 14,914 sent-email records —
- * the history of what went to which contact, not the campaign templates the ids
- * in draftXml point at. Nothing was joined from it, but it should never have
- * been requested. See UNSERVABLE_KINDS in catalogue.ts for the evidence.
- *
- * `/landingPages` is absent because it does not exist (404 on both versions).
- */
+/** `/landingPages` is absent because it does not exist — 404 on both versions. */
 
 export function isAllowed(method: string, path: string): boolean {
   if (method.toUpperCase() !== 'GET') return false;
