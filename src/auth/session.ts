@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import { baseUrlFor, normalizeAppName, sessionPathFor } from '../app.js';
 import { LOGIN_URL_PATTERN } from '../config.js';
+import { SessionExpiredError } from '../errors.js';
 import { type Guard, installReadOnlyGuard } from '../guard/readonly.js';
 
 export interface Session {
@@ -48,7 +49,7 @@ export async function closeSession(session: Session): Promise<void> {
 export function assertAuthenticated(page: Page): void {
   const url = page.url();
   if (LOGIN_URL_PATTERN.test(url)) {
-    throw new Error(
+    throw new SessionExpiredError(
       `Session expired — landed on ${url}. Re-run:  npm run login -- --app <appName>`,
     );
   }
@@ -65,7 +66,7 @@ export function assertAuthenticated(page: Page): void {
 export function assertResponseAuthenticated(response: { url(): string }): void {
   const url = response.url();
   if (LOGIN_URL_PATTERN.test(url)) {
-    throw new Error(
+    throw new SessionExpiredError(
       `Session expired — request was redirected to ${url}. ` +
         'Re-run:  npm run login -- --app <appName>',
     );
