@@ -5,6 +5,7 @@ import {
   dedupeEdges,
   entityId,
   mergeTallies,
+  referenceEdges,
   tagEdges,
   tagLabels,
 } from '../src/normalize/graphEdges.js';
@@ -267,5 +268,98 @@ describe('decisionTagEdges', () => {
       expect(labels.get('346')).toBe('JordanHatch.com -> Mastermind Panels Registered');
       expect(labels.has('999')).toBe(false);
     });
+  });
+});
+
+describe('referenceEdges', () => {
+  it('maps each lifted foreign key to its entity kind and edge kind', () => {
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '2',
+          style: 'newsletterRequest',
+          references: { tagIds: [], tagCategoryIds: [], webformId: '681' },
+        }),
+        makeNode({
+          cellId: '5',
+          style: 'landingPage',
+          references: { tagIds: [], tagCategoryIds: [], landingPageId: '42' },
+        }),
+        makeNode({
+          cellId: '6',
+          style: 'purchaseSuccess',
+          references: { tagIds: [], tagCategoryIds: [], purchaseId: '7' },
+        }),
+        makeNode({
+          cellId: '8',
+          style: 'internalForm',
+          references: { tagIds: [], tagCategoryIds: [], internalFormId: '3' },
+        }),
+      ],
+      sequences: [
+        makeSequence({
+          steps: [
+            {
+              ...makeNode({
+                cellId: '25',
+                style: 'email',
+                references: { tagIds: [], tagCategoryIds: [], marketingEmailId: '1200' },
+              }),
+              position: 0,
+            },
+          ],
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:987').edges).toEqual([
+      { from: 'campaign:987', to: 'webform:681', kind: 'entry-point', viaCellId: '2' },
+      { from: 'campaign:987', to: 'landingPage:42', kind: 'entry-point', viaCellId: '5' },
+      { from: 'campaign:987', to: 'product:7', kind: 'entry-point', viaCellId: '6' },
+      { from: 'campaign:987', to: 'form:3', kind: 'entry-point', viaCellId: '8' },
+      { from: 'campaign:987', to: 'email:1200', kind: 'sends', viaCellId: '25' },
+    ]);
+  });
+
+  it('points a sourceFunnelId at another campaign', () => {
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '3',
+          style: 'existingList',
+          references: { tagIds: [], tagCategoryIds: [], sourceFunnelId: '584' },
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:987').edges).toEqual([
+      { from: 'campaign:987', to: 'campaign:584', kind: 'references-campaign', viaCellId: '3' },
+    ]);
+  });
+
+  it('tallies a foreign key with no entity kind instead of inventing one', () => {
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '9',
+          style: 'note',
+          references: { tagIds: [], tagCategoryIds: [], marketingNoteId: '55' },
+        }),
+      ],
+    });
+    const harvest = referenceEdges(campaign, 'campaign:1');
+    expect(harvest.edges).toEqual([]);
+    expect(harvest.tallies['reference attribute "marketingNoteId" has no entity kind']).toBe(1);
+  });
+
+  it('never treats tagIds or tagCategoryIds as a foreign key', () => {
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '4',
+          style: 'tagApplied',
+          references: { tagIds: ['346'], tagCategoryIds: ['9'] },
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:1')).toEqual({ edges: [], tallies: {} });
   });
 });

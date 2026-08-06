@@ -208,3 +208,55 @@ export function tagLabels(campaigns: NormalizedCampaign[]): Map<string, string> 
   }
   return labels;
 }
+
+/**
+ * The lifted foreign keys that have a place in the graph's entity vocabulary.
+ *
+ * `nodes.ts` lifts 20 foreign-key attributes; these six are the ones the seven
+ * EntityKind values can express. The other fourteen — marketingNoteId (94 in
+ * the corpus), fileBoxId (43), stageId (37), userId, roundRobinId, eventId,
+ * marketingFulfillmentId, actionSetId, marketingLetterId, fieldValueFileBoxId,
+ * confirmLinkId, voiceBroadcastId, marketingFaxId, createOrderConfigId — are
+ * tallied so the warnings say plainly what the graph is not modelling. They
+ * remain in the normalised files, so widening this table later costs a re-run
+ * and nothing else.
+ */
+export const REFERENCE_EDGES: Record<string, { kind: EntityKind; edge: EdgeKind }> = {
+  marketingEmailId: { kind: 'email', edge: 'sends' },
+  webformId: { kind: 'webform', edge: 'entry-point' },
+  landingPageId: { kind: 'landingPage', edge: 'entry-point' },
+  purchaseId: { kind: 'product', edge: 'entry-point' },
+  internalFormId: { kind: 'form', edge: 'entry-point' },
+  sourceFunnelId: { kind: 'campaign', edge: 'references-campaign' },
+};
+
+/** Harvests edges from the foreign keys `nodes.ts` lifted onto each node. */
+export function referenceEdges(campaign: NormalizedCampaign, from: string): EdgeHarvest {
+  const edges: GraphEdge[] = [];
+  const tallies: Record<string, number> = {};
+
+  for (const node of campaignNodes(campaign)) {
+    for (const [attribute, value] of Object.entries(node.references)) {
+      // tagIds and tagCategoryIds are the two array-valued members of
+      // NodeReferences; tags are tagEdges' business, not this function's.
+      if (attribute === 'tagIds' || attribute === 'tagCategoryIds') continue;
+      if (typeof value !== 'string') continue;
+
+      const mapping = REFERENCE_EDGES[attribute];
+      if (mapping === undefined) {
+        const reason = `reference attribute "${attribute}" has no entity kind`;
+        tallies[reason] = (tallies[reason] ?? 0) + 1;
+        continue;
+      }
+
+      edges.push({
+        from,
+        to: entityId(mapping.kind, value),
+        kind: mapping.edge,
+        viaCellId: node.cellId,
+      });
+    }
+  }
+
+  return { edges, tallies };
+}
