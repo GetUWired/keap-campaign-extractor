@@ -255,3 +255,111 @@ describe('derived triggers edges', () => {
     expect(graph.edges.filter((e) => e.kind === 'triggers')).toEqual([]);
   });
 });
+
+describe('findings', () => {
+  it('reports a campaign with no goals as unreachable', () => {
+    const graph = buildGraph([makeCampaign({ funnelId: '1' })]);
+    expect(graph.findings.unreachableCampaigns).toEqual([
+      { campaignId: 'campaign:1', reason: 'no goals — nothing can enter this campaign' },
+    ]);
+  });
+
+  it('reports a campaign whose only goals listen for tags nobody else applies', () => {
+    const graph = buildGraph([
+      makeCampaign({ funnelId: '557', goals: [listenGoal('4', ['624'])] }),
+      makeCampaign({
+        funnelId: '2',
+        goals: [makeNode({ cellId: '9', style: 'newsletterRequest' })],
+      }),
+    ]);
+    expect(graph.findings.unreachableCampaigns).toEqual([
+      {
+        campaignId: 'campaign:557',
+        reason: 'every goal listens for a tag no other campaign applies',
+      },
+    ]);
+  });
+
+  it('does not call a campaign unreachable when another campaign applies its tag', () => {
+    const graph = buildGraph([
+      makeCampaign({ funnelId: '467', goals: [listenGoal('4', ['346'])] }),
+      makeCampaign({
+        funnelId: '16',
+        sequences: [makeSequence({ steps: [applyStep('10', ['346'])] })],
+      }),
+    ]);
+    expect(graph.findings.unreachableCampaigns.map((u) => u.campaignId)).toEqual(['campaign:16']);
+  });
+
+  it('does not let a campaign applying its own tag count as reachable', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '594',
+        goals: [listenGoal('4', ['610'])],
+        sequences: [makeSequence({ steps: [applyStep('10', ['610'])] })],
+      }),
+    ]);
+    expect(graph.findings.unreachableCampaigns.map((u) => u.campaignId)).toEqual(['campaign:594']);
+  });
+
+  it('ignores a campaign with a non-tag goal', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '1',
+        goals: [makeNode({ cellId: '2', style: 'newsletterRequest' }), listenGoal('4', ['999'])],
+      }),
+    ]);
+    expect(graph.findings.unreachableCampaigns).toEqual([]);
+  });
+
+  it('separates tags nobody applies from tags nobody listens for', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '1',
+        sequences: [makeSequence({ steps: [applyStep('10', ['500'])] })],
+      }),
+      makeCampaign({ funnelId: '2', goals: [listenGoal('4', ['600'])] }),
+    ]);
+    expect(graph.findings.tagsAppliedByNobody).toEqual(['tag:600']);
+    expect(graph.findings.tagsNobodyListensFor).toEqual(['tag:500']);
+  });
+
+  it('reports an email used by more than one campaign', () => {
+    const emailStep = (id: string) => ({
+      ...makeNode({
+        cellId: '9',
+        style: 'email',
+        references: { tagIds: [], tagCategoryIds: [], marketingEmailId: id },
+      }),
+      position: 0,
+    });
+    const graph = buildGraph([
+      makeCampaign({ funnelId: '1', sequences: [makeSequence({ steps: [emailStep('77')] })] }),
+      makeCampaign({ funnelId: '2', sequences: [makeSequence({ steps: [emailStep('77')] })] }),
+      makeCampaign({ funnelId: '3', sequences: [makeSequence({ steps: [emailStep('88')] })] }),
+    ]);
+    expect(graph.findings.sharedEmails).toEqual([
+      { emailId: 'email:77', campaigns: ['campaign:1', 'campaign:2'] },
+    ]);
+  });
+
+  it('reports a tag applied by more than one campaign', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '137',
+        sequences: [makeSequence({ steps: [applyStep('10', ['419'])] })],
+      }),
+      makeCampaign({
+        funnelId: '321',
+        sequences: [makeSequence({ steps: [applyStep('10', ['419'])] })],
+      }),
+      makeCampaign({
+        funnelId: '999',
+        sequences: [makeSequence({ steps: [applyStep('10', ['420'])] })],
+      }),
+    ]);
+    expect(graph.findings.duplicateTagAppliers).toEqual([
+      { tagId: 'tag:419', campaigns: ['campaign:137', 'campaign:321'] },
+    ]);
+  });
+});

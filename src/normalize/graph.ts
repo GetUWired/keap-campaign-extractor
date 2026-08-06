@@ -36,14 +36,6 @@ export interface AccountGraph {
   warnings: string[];
 }
 
-const EMPTY_FINDINGS: GraphFindings = {
-  unreachableCampaigns: [],
-  tagsAppliedByNobody: [],
-  tagsNobodyListensFor: [],
-  sharedEmails: [],
-  duplicateTagAppliers: [],
-};
-
 /** "tag:646" → "tag". Entity ids are minted by entityId and always have one colon. */
 function kindOf(id: string): EntityKind {
   return id.slice(0, id.indexOf(':')) as EntityKind;
@@ -69,6 +61,16 @@ function compareEdges(a: GraphEdge, b: GraphEdge): number {
   const left = key(a);
   const right = key(b);
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Sorts entity ids numerically within their kind, for stable output. */
+function sortIds(ids: Iterable<string>): string[] {
+  return [...ids].sort((a, b) => {
+    const left = Number(a.slice(a.indexOf(':') + 1));
+    const right = Number(b.slice(b.indexOf(':') + 1));
+    if (Number.isFinite(left) && Number.isFinite(right) && left !== right) return left - right;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
 }
 
 /** Groups edges of one kind by target, collecting the campaigns on the other end. */
@@ -113,6 +115,65 @@ export function triggerEdges(observed: GraphEdge[]): GraphEdge[] {
   }
 
   return dedupeEdges(edges);
+}
+
+/**
+ * The questions the graph exists to answer.
+ *
+ * `unreachableCampaigns` is the sharpest of them for the live-versus-dead
+ * problem: a campaign whose only door is a tag goal, for a tag no OTHER
+ * campaign applies, cannot be entered by the automation. A campaign applying a
+ * tag it listens for does not save itself — the loop still needs an outside
+ * first push — so self-application is excluded deliberately.
+ */
+export function computeFindings(
+  usable: { campaign: NormalizedCampaign; from: string }[],
+  edges: GraphEdge[],
+  tagEntityIds: string[],
+): GraphFindings {
+  const appliers = campaignsByTarget(edges, 'applies');
+  const listeners = campaignsByTarget(edges, 'listens-for');
+  const senders = campaignsByTarget(edges, 'sends');
+
+  const unreachableCampaigns: { campaignId: string; reason: string }[] = [];
+  for (const { campaign, from } of usable) {
+    if (campaign.goals.length === 0) {
+      unreachableCampaigns.push({
+        campaignId: from,
+        reason: 'no goals — nothing can enter this campaign',
+      });
+      continue;
+    }
+    if (!campaign.goals.every((goal) => goal.style === 'tagApplied')) continue;
+
+    const enteredFromOutside = campaign.goals
+      .flatMap((goal) => goal.references.tagIds)
+      .some((tagId) => {
+        const applying = appliers.get(entityId('tag', tagId));
+        return applying !== undefined && [...applying].some((applier) => applier !== from);
+      });
+    if (!enteredFromOutside) {
+      unreachableCampaigns.push({
+        campaignId: from,
+        reason: 'every goal listens for a tag no other campaign applies',
+      });
+    }
+  }
+
+  const withSeveral = (grouped: Map<string, Set<string>>): [string, string[]][] =>
+    sortIds([...grouped.keys()])
+      .filter((id) => (grouped.get(id)?.size ?? 0) > 1)
+      .map((id) => [id, sortIds(grouped.get(id) ?? [])]);
+
+  return {
+    unreachableCampaigns,
+    tagsAppliedByNobody: sortIds(tagEntityIds.filter((id) => !appliers.has(id))),
+    tagsNobodyListensFor: sortIds(
+      tagEntityIds.filter((id) => appliers.has(id) && !listeners.has(id)),
+    ),
+    sharedEmails: withSeveral(senders).map(([emailId, campaigns]) => ({ emailId, campaigns })),
+    duplicateTagAppliers: withSeveral(appliers).map(([tagId, campaigns]) => ({ tagId, campaigns })),
+  };
 }
 
 export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
@@ -190,7 +251,11 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
   return {
     entities: [...entities.values()].sort(compareEntities),
     edges: [...edges, ...derived].sort(compareEdges),
-    findings: { ...EMPTY_FINDINGS },
+    findings: computeFindings(
+      usable,
+      edges,
+      [...entities.values()].filter((e) => e.kind === 'tag').map((e) => e.id),
+    ),
     warnings,
   };
 }
