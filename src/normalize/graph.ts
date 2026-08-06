@@ -248,10 +248,17 @@ export function buildGraph(
   // sources, the same class of check that validated the 131-tag count.
   const catalogued = new Map((catalogue?.entities ?? []).map((entry) => [entry.id, entry]));
 
+  // Decision criteria render a tag as "Category -> Name"; the API returns the
+  // bare name. Verified against all six tags that carry both labels: five
+  // differ only by that prefix, and treating them as conflicts would bury a
+  // real drift under predictable noise.
+  const labelsAgree = (criteria: string, api: string): boolean =>
+    criteria === api || criteria.endsWith(` -> ${api}`);
+
   const labelFor = (id: string, fallback: string | null): string | null => {
     const record = catalogued.get(id);
     if (record?.name == null) return fallback;
-    if (fallback !== null && fallback !== record.name) {
+    if (fallback !== null && !labelsAgree(fallback, record.name)) {
       warnings.push(
         `${id}: decision criteria say "${fallback}" but the catalogue says ` +
           `"${record.name}" — using the catalogue`,

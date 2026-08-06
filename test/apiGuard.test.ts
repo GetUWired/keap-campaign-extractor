@@ -6,8 +6,6 @@ describe('api guard', () => {
     for (const path of [
       '/crm/rest/v1/tags',
       '/crm/rest/v2/tags',
-      '/crm/rest/v1/emails',
-      '/crm/rest/v2/emails',
       '/crm/rest/v1/products',
       '/crm/rest/v1/users',
       '/crm/rest/v1/forms',
@@ -27,6 +25,13 @@ describe('api guard', () => {
     ]) {
       expect(isAllowed('GET', path), path).toBe(false);
     }
+  });
+
+  it('refuses /emails, which serves sent-email history rather than templates', () => {
+    // It was allowlisted once and pulled 14,914 records of what went to which
+    // contact. Nothing was joined from it; it should never have been requested.
+    expect(isAllowed('GET', '/crm/rest/v1/emails')).toBe(false);
+    expect(isAllowed('GET', '/crm/rest/v2/emails')).toBe(false);
   });
 
   it('refuses other resources holding personal data', () => {

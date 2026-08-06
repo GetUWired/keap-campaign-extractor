@@ -34,13 +34,36 @@ export interface EntityCatalogue {
  */
 export const KIND_CANDIDATES: { kind: EntityKind; paths: string[] }[] = [
   { kind: 'tag', paths: ['/crm/rest/v2/tags', '/crm/rest/v1/tags'] },
-  { kind: 'email', paths: ['/crm/rest/v2/emails', '/crm/rest/v1/emails'] },
   { kind: 'product', paths: ['/crm/rest/v1/products', '/crm/rest/v2/products'] },
   { kind: 'user', paths: ['/crm/rest/v1/users', '/crm/rest/v2/users'] },
-  { kind: 'webform', paths: ['/crm/rest/v1/forms', '/crm/rest/v2/forms'] },
+  // /forms serves INTERNAL forms. Measured against the live account: it matched
+  // 6 of 16 internalFormId references and 0 of 113 webformId references. An
+  // earlier ordering let `webform` claim this endpoint first, which would have
+  // labelled 113 webforms from a set of 7 unrelated records.
   { kind: 'form', paths: ['/crm/rest/v1/forms', '/crm/rest/v2/forms'] },
-  { kind: 'landingPage', paths: ['/crm/rest/v2/landingPages', '/crm/rest/v1/landingPages'] },
 ];
+
+/**
+ * Kinds the REST API demonstrably cannot serve, with the evidence.
+ *
+ * Recorded rather than retried: a candidate list that keeps probing a resource
+ * already proven wrong costs requests and, worse, invites someone to "fix" the
+ * gap by joining against data that does not mean what the id means.
+ *
+ * All three were measured against the live `jordan` account on 2026-08-06.
+ */
+export const UNSERVABLE_KINDS: Record<string, string> = {
+  email:
+    'the /emails resource is sent-email history, not campaign email templates — 14,914 records ' +
+    'against 250 referenced, ids spanning 1–30740, and all 72 named email steps disagreed with ' +
+    'the record sitting at their marketingEmailId. Joining it would attach a stranger’s ' +
+    'subject line to a campaign step. Closes handoff §14 Q9: the API cannot supply these.',
+  webform:
+    '/forms serves internal forms, matching 6 of 16 internalFormId references and 0 of 113 ' +
+    'webformId references. No webform resource was found.',
+  landingPage:
+    'no endpoint exists: /crm/rest/v2/landingPages and /crm/rest/v1/landingPages both 404.',
+};
 
 /** The name-ish fields Keap uses, in the order they should win. */
 const NAME_FIELDS = ['name', 'title', 'product_name', 'display_name', 'subject'];
@@ -169,6 +192,7 @@ export async function probeKind(
 export async function fetchCatalogue(
   client: ApiClient,
   appName: string,
+  candidates: { kind: EntityKind; paths: string[] }[] = KIND_CANDIDATES,
 ): Promise<EntityCatalogue> {
   await assertAccountIdentity(client, appName);
 
@@ -177,7 +201,11 @@ export async function fetchCatalogue(
   const warnings: string[] = [];
   const fetchedBy = new Map<string, EntityKind>();
 
-  for (const { kind, paths } of KIND_CANDIDATES) {
+  for (const [kind, reason] of Object.entries(UNSERVABLE_KINDS)) {
+    sources[kind] = { unavailable: reason };
+  }
+
+  for (const { kind, paths } of candidates) {
     const probed = await probeKind(client, kind, paths);
     if ('unavailable' in probed) {
       sources[kind] = probed;

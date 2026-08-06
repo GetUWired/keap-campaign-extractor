@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   KIND_CANDIDATES,
+  UNSERVABLE_KINDS,
   assertAccountIdentity,
   fetchCatalogue,
   mapRecord,
@@ -67,14 +68,27 @@ describe('mapRecord', () => {
     expect(mapRecord('tag', { id: '646L', name: 'x' })?.id).toBe('tag:646');
   });
 
-  it('offers candidate paths for every kind enrichment was asked to name', () => {
+  it('offers candidate paths for every kind the API can actually serve', () => {
     const kinds = KIND_CANDIDATES.map((c) => c.kind);
-    for (const kind of ['tag', 'email', 'product', 'user', 'webform', 'landingPage', 'form']) {
+    for (const kind of ['tag', 'product', 'user', 'form']) {
       expect(kinds, kind).toContain(kind);
     }
     for (const candidate of KIND_CANDIDATES) {
       expect(candidate.paths.length, candidate.kind).toBeGreaterThan(0);
     }
+  });
+
+  it('never probes a kind already proven unservable', () => {
+    const kinds = KIND_CANDIDATES.map((c) => c.kind);
+    for (const kind of ['email', 'webform', 'landingPage']) {
+      expect(kinds, kind).not.toContain(kind);
+      expect(UNSERVABLE_KINDS[kind], kind).toBeTruthy();
+    }
+  });
+
+  it('lets form claim /forms, since that is what the endpoint actually serves', () => {
+    // Measured: 6 of 16 internalFormId references matched, 0 of 113 webformId.
+    expect(KIND_CANDIDATES.find((c) => c.kind === 'form')?.paths).toContain('/crm/rest/v1/forms');
   });
 });
 
@@ -175,8 +189,22 @@ describe('fetchCatalogue', () => {
       extra: {},
     });
     expect(catalogue.sources.tag).toEqual({ endpoint: '/crm/rest/v1/tags', count: 1 });
-    expect(catalogue.sources.landingPage).toMatchObject({
+    expect(catalogue.sources.user).toMatchObject({
       unavailable: expect.stringContaining('no candidate endpoint answered'),
+    });
+  });
+
+  it('records the proven-unservable kinds without spending a request on them', async () => {
+    const client = fakeClient({ ...profile, '/crm/rest/v1/tags': [{ id: 1, name: 'x' }] });
+    const catalogue = await fetchCatalogue(client, 'jordan');
+    expect(catalogue.sources.email).toMatchObject({
+      unavailable: expect.stringContaining('sent-email history'),
+    });
+    expect(catalogue.sources.webform).toMatchObject({
+      unavailable: expect.stringContaining('internal forms'),
+    });
+    expect(catalogue.sources.landingPage).toMatchObject({
+      unavailable: expect.stringContaining('404'),
     });
   });
 
@@ -202,16 +230,25 @@ describe('fetchCatalogue', () => {
     expect(catalogue.entities).toHaveLength(1);
   });
 
-  it('never mints a second entity from an endpoint another kind already claimed', async () => {
-    // webform and form both name /forms. Fetching it twice would turn every
-    // webform into an identically-numbered internal form that may not exist.
+  it('gives /forms to form, which is what that endpoint actually serves', () => {
     const client = fakeClient({ ...profile, '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }] });
-    const catalogue = await fetchCatalogue(client, 'jordan');
+    return fetchCatalogue(client, 'jordan').then((catalogue) => {
+      expect(catalogue.entities.map((e) => e.id)).toEqual(['form:3']);
+    });
+  });
 
-    expect(catalogue.entities.filter((e) => e.id.endsWith(':3'))).toHaveLength(1);
-    expect(catalogue.entities[0]?.id).toBe('webform:3');
-    expect(catalogue.sources.form).toEqual({
-      unavailable: '/crm/rest/v1/forms is already served as "webform" — not separately resolvable',
+  it('never mints a second entity from an endpoint another kind already claimed', async () => {
+    // Insurance against re-introducing a shared endpoint in KIND_CANDIDATES —
+    // exactly the mistake that once made every webform a phantom internal form.
+    const client = fakeClient({ ...profile, '/crm/rest/v1/forms': [{ id: 3, title: 'Contact' }] });
+    const catalogue = await fetchCatalogue(client, 'jordan', [
+      { kind: 'form', paths: ['/crm/rest/v1/forms'] },
+      { kind: 'webform', paths: ['/crm/rest/v1/forms'] },
+    ]);
+
+    expect(catalogue.entities.map((e) => e.id)).toEqual(['form:3']);
+    expect(catalogue.sources.webform).toEqual({
+      unavailable: '/crm/rest/v1/forms is already served as "form" — not separately resolvable',
     });
   });
 
