@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   campaignNodes,
+  decisionTagEdges,
   dedupeEdges,
   entityId,
   mergeTallies,
   tagEdges,
+  tagLabels,
 } from '../src/normalize/graphEdges.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
@@ -152,5 +154,118 @@ describe('tagEdges', () => {
       goals: [makeNode({ cellId: '1', style: 'newsletterRequest' })],
     });
     expect(tagEdges(campaign, 'campaign:1')).toEqual({ edges: [], tallies: {} });
+  });
+});
+
+describe('decisionTagEdges', () => {
+  const criteria = (category: string, values: { id: string; label: string | null }[]) => ({
+    decisionIds: ['479'],
+    flowIds: ['3'],
+    wrappers: [
+      {
+        index: 0,
+        decisionId: '479',
+        flowId: '3',
+        primaryKey: null,
+        secondaryKey: null,
+        secondaryKeyId: null,
+        any: [
+          {
+            groupId: '1499',
+            all: [
+              {
+                ruleId: '561',
+                subject: null,
+                subjectLabel: null,
+                category,
+                categoryLabel: null,
+                field: null,
+                fieldLabel: null,
+                constraint: null,
+                constraintLabel: null,
+                values,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    elseOptions: [],
+    elseSelected: null,
+    warnings: [],
+  });
+
+  it('emits a tests edge per tag value', () => {
+    const rules = criteria('tags_FieldCategory', [{ id: '1123', label: 'Bought' }]);
+    const campaign = makeCampaign({
+      decisions: [
+        makeDecision({ cellId: '34', branches: [{ decisionId: '479', flowId: '3', rules }] }),
+      ],
+    });
+    expect(decisionTagEdges(campaign, 'campaign:987').edges).toEqual([
+      { from: 'campaign:987', to: 'tag:1123', kind: 'tests', viaCellId: '34' },
+    ]);
+  });
+
+  it('reads a decision once even though every branch carries the same rules object', () => {
+    // normalizeCampaign attaches criteriaByCellId[cellId] to EVERY branch, so
+    // iterating branches would count each rule once per branch.
+    const rules = criteria('tags_FieldCategory', [{ id: '1123', label: null }]);
+    const campaign = makeCampaign({
+      decisions: [
+        makeDecision({
+          cellId: '34',
+          branches: [
+            { decisionId: '479', flowId: '3', rules },
+            { decisionId: '481', flowId: '32', rules },
+          ],
+        }),
+      ],
+    });
+    expect(decisionTagEdges(campaign, 'campaign:987').edges).toHaveLength(1);
+  });
+
+  it('ignores rules in a non-tag category', () => {
+    const rules = criteria('formSubmissionOptions_FieldCategory', [{ id: '3780', label: null }]);
+    const campaign = makeCampaign({
+      decisions: [
+        makeDecision({ cellId: '13', branches: [{ decisionId: '1', flowId: '2', rules }] }),
+      ],
+    });
+    expect(decisionTagEdges(campaign, 'campaign:584').edges).toEqual([]);
+  });
+
+  it('tallies a decision with no branches rather than throwing', () => {
+    // 11 of 85 decisions in the corpus are unconfigured diamonds with no branches.
+    const campaign = makeCampaign({ decisions: [makeDecision({ cellId: '141', branches: [] })] });
+    const harvest = decisionTagEdges(campaign, 'campaign:211');
+    expect(harvest.edges).toEqual([]);
+    expect(Object.values(harvest.tallies)).toEqual([1]);
+  });
+
+  it('tallies a decision whose criteria file was never fetched', () => {
+    const campaign = makeCampaign({
+      decisions: [
+        makeDecision({ cellId: '34', branches: [{ decisionId: '479', flowId: '3', rules: null }] }),
+      ],
+    });
+    expect(Object.values(decisionTagEdges(campaign, 'campaign:1').tallies)).toEqual([1]);
+  });
+
+  describe('tagLabels', () => {
+    it('collects display names from tag rule values', () => {
+      const rules = criteria('tags_FieldCategory', [
+        { id: '346', label: 'JordanHatch.com -> Mastermind Panels Registered' },
+        { id: '999', label: null },
+      ]);
+      const campaign = makeCampaign({
+        decisions: [
+          makeDecision({ cellId: '34', branches: [{ decisionId: '1', flowId: '2', rules }] }),
+        ],
+      });
+      const labels = tagLabels([campaign]);
+      expect(labels.get('346')).toBe('JordanHatch.com -> Mastermind Panels Registered');
+      expect(labels.has('999')).toBe(false);
+    });
   });
 });

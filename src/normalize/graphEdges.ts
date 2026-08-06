@@ -1,3 +1,4 @@
+import type { RuleValue } from '../parse/decisionHtml.js';
 import type { NormalizedCampaign } from './campaign.js';
 import type { NormalizedNode } from './nodes.js';
 
@@ -124,4 +125,86 @@ export function tagEdges(campaign: NormalizedCampaign, from: string): EdgeHarves
   }
 
   return { edges, tallies };
+}
+
+/**
+ * Keap's category value for a tag rule.
+ *
+ * Measured, not guessed: the category values across the corpus are
+ * formSubmissionOptions_FieldCategory (204), tags_FieldCategory (110),
+ * customFieldGroup1_FieldCategory (39), customFieldGroup7_FieldCategory (11)
+ * and contact.contactFields_FieldCategory (4). A parser looking for "Tag"
+ * would find nothing and report it as a campaign with no tag decisions.
+ */
+export const TAG_RULE_CATEGORY = 'tags_FieldCategory';
+
+/**
+ * Visits every tag-category rule value on a campaign's decisions.
+ *
+ * Once per decision, NOT once per branch: normalizeCampaign attaches the same
+ * DecisionCriteria object to every branch of a decision, so walking branches
+ * multiplies each rule by the branch count.
+ */
+export function eachDecisionTagValue(
+  campaign: NormalizedCampaign,
+  visit: (value: RuleValue, decisionCellId: string) => void,
+): { decisionsWithoutCriteria: number } {
+  let decisionsWithoutCriteria = 0;
+
+  for (const decision of campaign.decisions) {
+    const rules = decision.branches.find((branch) => branch.rules !== null)?.rules ?? null;
+    if (rules === null) {
+      decisionsWithoutCriteria++;
+      continue;
+    }
+    for (const wrapper of rules.wrappers) {
+      for (const group of wrapper.any) {
+        for (const rule of group.all) {
+          if (rule.category !== TAG_RULE_CATEGORY) continue;
+          for (const value of rule.values) visit(value, decision.cellId);
+        }
+      }
+    }
+  }
+
+  return { decisionsWithoutCriteria };
+}
+
+/**
+ * Harvests `tests` edges: a campaign tests a tag when a decision branches on it.
+ *
+ * A decision that routes on a tag is an edge the graph would otherwise miss
+ * entirely — 11 tags in the corpus appear nowhere except decision criteria.
+ */
+export function decisionTagEdges(campaign: NormalizedCampaign, from: string): EdgeHarvest {
+  const edges: GraphEdge[] = [];
+  const tallies: Record<string, number> = {};
+
+  const { decisionsWithoutCriteria } = eachDecisionTagValue(campaign, (value, decisionCellId) => {
+    edges.push({ from, to: entityId('tag', value.id), kind: 'tests', viaCellId: decisionCellId });
+  });
+
+  if (decisionsWithoutCriteria > 0) {
+    tallies['decisions have no criteria on disk — any tags they route on are invisible'] =
+      decisionsWithoutCriteria;
+  }
+
+  return { edges, tallies };
+}
+
+/**
+ * Tag display names, keyed by tag id.
+ *
+ * Decision criteria are the ONLY place a display name appears anywhere in the
+ * extracted data — the `_text` companion input beside a rule value. Everything
+ * else is bare ids until stage 3 resolves them through the REST API.
+ */
+export function tagLabels(campaigns: NormalizedCampaign[]): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const campaign of campaigns) {
+    eachDecisionTagValue(campaign, (value) => {
+      if (value.label !== null && !labels.has(value.id)) labels.set(value.id, value.label);
+    });
+  }
+  return labels;
 }
