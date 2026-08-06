@@ -403,6 +403,30 @@ progress record separate from the artifacts it describes, and it works.
 After the full run, `progress.json` lists 170 done and there are 170 campaign directories, with no
 entry on either side lacking a counterpart.
 
+### Authorisation — settled
+
+Handoff §12 says to "check the client's terms of service before running at scale". **Resolved
+2026-08-05: not a blocker.** Clients grant this agency access to their accounts so it can work on
+their campaigns on their behalf, so operating the app through a delegated login is the normal course
+of the engagement rather than something exceptional.
+
+The safeguards stay regardless, because they protect the client's data rather than the agency's
+position: GET only, every write path blocked at the driver level, no contact records touched, and a
+session a human established by hand.
+
+For reference, one full account costs under 500 meaningful requests over about six minutes —
+`funnelEditor` ×160, `keepAlive` ×160, `decisionEditor` ×85, plus ~70 incidental app calls.
+
+### Request volume is dominated by page chrome
+
+Of 31,814 requests to the tenant during the full run, only about 480 were meaningful. **The other
+~98.5% were SVGs, fonts, CSS and JavaScript** — the cost of loading the entire campaign-builder UI
+160 times in order to read one DOM property off one element.
+
+Worth fixing on its own merits: it is most likely the bulk of the 2.18s per campaign, and it is what
+the handoff's "throttle and cache" rule is really about. Playwright's route interception is already
+installed for the read-only guard, so filtering by resource type is a small change to existing code.
+
 ### Incidental
 
 The app build changed mid-session, from `1.70.0.989251-sysarch-202608031100` to
