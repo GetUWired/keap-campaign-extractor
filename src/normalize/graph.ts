@@ -28,6 +28,10 @@ export interface GraphFindings {
   tagsNobodyListensFor: string[];
   sharedEmails: { emailId: string; campaigns: string[] }[];
   duplicateTagAppliers: { tagId: string; campaigns: string[] }[];
+  /** Referenced ids with no entity behind them — broken campaigns. Empty without a catalogue. */
+  entitiesNotFound: string[];
+  /** Catalogue entities nothing references — dead weight not to migrate. Empty without a catalogue. */
+  unusedEntities: string[];
 }
 
 export interface AccountGraph {
@@ -131,6 +135,7 @@ export function computeFindings(
   usable: { campaign: NormalizedCampaign; from: string }[],
   edges: GraphEdge[],
   tagEntityIds: string[],
+  catalogue?: EntityCatalogue,
 ): GraphFindings {
   const appliers = campaignsByTarget(edges, 'applies');
   const listeners = campaignsByTarget(edges, 'listens-for');
@@ -166,8 +171,24 @@ export function computeFindings(
       .filter((id) => (grouped.get(id)?.size ?? 0) > 1)
       .map((id) => [id, sortIds(grouped.get(id) ?? [])]);
 
+  // Both are only meaningful against a catalogue: without one, "not found" and
+  // "not looked up" are the same observation, and reporting them would be a
+  // confident wrong answer about every entity in the account.
+  const catalogued = new Set((catalogue?.entities ?? []).map((entry) => entry.id));
+  const referenced = new Set(edges.filter((edge) => !edge.derived).map((edge) => edge.to));
+
+  const entitiesNotFound =
+    catalogue === undefined
+      ? []
+      : sortIds([...referenced].filter((id) => !id.startsWith('campaign:') && !catalogued.has(id)));
+
+  const unusedEntities =
+    catalogue === undefined ? [] : sortIds([...catalogued].filter((id) => !referenced.has(id)));
+
   return {
     unreachableCampaigns,
+    entitiesNotFound,
+    unusedEntities,
     tagsAppliedByNobody: sortIds(tagEntityIds.filter((id) => !appliers.has(id))),
     tagsNobodyListensFor: sortIds(
       tagEntityIds.filter((id) => appliers.has(id) && !listeners.has(id)),
@@ -282,6 +303,7 @@ export function buildGraph(
       usable,
       edges,
       [...entities.values()].filter((e) => e.kind === 'tag').map((e) => e.id),
+      catalogue,
     ),
     warnings,
   };

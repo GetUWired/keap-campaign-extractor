@@ -484,3 +484,45 @@ describe('buildGraph with a catalogue', () => {
     expect(graph.entities.find((e) => e.id === 'campaign:16')?.label).toBe('Real Campaign Name');
   });
 });
+
+describe('catalogue findings', () => {
+  it('reports a referenced entity the catalogue does not contain', () => {
+    // A campaign pointing at a deleted email is a broken campaign.
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '16',
+          sequences: [makeSequence({ steps: [emailStep('25', '1200')] })],
+        }),
+      ],
+      catalogue([{ id: 'email:9999', kind: 'email', name: 'Something else', extra: {} }]),
+    );
+    expect(graph.findings.entitiesNotFound).toEqual(['email:1200']);
+  });
+
+  it('reports a catalogue entity nothing references', () => {
+    const graph = buildGraph(
+      [makeCampaign({ funnelId: '16' })],
+      catalogue([{ id: 'tag:500', kind: 'tag', name: 'Unused', extra: {} }]),
+    );
+    expect(graph.findings.unusedEntities).toEqual(['tag:500']);
+  });
+
+  it('leaves both empty when no catalogue was supplied', () => {
+    // "not found" and "not looked up" are different claims.
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '16',
+        sequences: [makeSequence({ steps: [emailStep('25', '1200')] })],
+      }),
+    ]);
+    expect(graph.findings.entitiesNotFound).toEqual([]);
+    expect(graph.findings.unusedEntities).toEqual([]);
+  });
+
+  it('never reports a campaign as not found', () => {
+    // Campaigns come from the artifact directory, not the catalogue.
+    const graph = buildGraph([makeCampaign({ funnelId: '16' })], catalogue([]));
+    expect(graph.findings.entitiesNotFound).toEqual([]);
+  });
+});
