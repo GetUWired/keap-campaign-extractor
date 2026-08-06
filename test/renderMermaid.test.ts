@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { normalizeCampaign } from '../src/normalize/campaign.js';
-import { renderMermaid } from '../src/render/mermaid.js';
+import { doesNothing, renderMermaid } from '../src/render/mermaid.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
 const c987 = readFileSync(new URL('./fixtures/campaign-987-draft.xml', import.meta.url), 'utf8');
@@ -81,5 +81,19 @@ describe('renderMermaid', () => {
 
   it('produces a diagram with no nodes for an empty campaign, not a crash', () => {
     expect(renderMermaid(makeCampaign({ funnelId: '1' }))).toBe('flowchart TD');
+  });
+});
+
+describe('doesNothing', () => {
+  it('treats a sequence with only a start vertex as doing nothing', () => {
+    // 28 sequences across the account are like this — including both of
+    // campaign 987's terminal branches. Counting only steps.length === 0
+    // undercounts the account's dead sequences by 28.
+    expect(doesNothing([{ style: 'start' }])).toBe(true);
+    expect(doesNothing([])).toBe(true);
+  });
+
+  it('does not treat a sequence with real work as empty', () => {
+    expect(doesNothing([{ style: 'start' }, { style: 'email' }])).toBe(false);
   });
 });

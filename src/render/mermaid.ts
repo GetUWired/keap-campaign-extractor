@@ -14,6 +14,19 @@ const LABEL_LIMIT = 44;
  */
 const nodeId = (cellId: string): string => `n${cellId.replace(/\W/g, '_')}`;
 
+/**
+ * True when a sequence does nothing at all.
+ *
+ * Not simply `steps.length === 0`. A sequence whose only step is the `start`
+ * vertex has one step and still does nothing — 28 such sequences exist across
+ * the account, including both of campaign 987's terminal branches. Counting
+ * only the zero-step case undercounts the account's dead sequences by 28,
+ * reporting 365 where 393 do nothing.
+ */
+export function doesNothing(steps: { style: string }[]): boolean {
+  return steps.every((step) => step.style === 'start');
+}
+
 /** A node's own name, falling back to what it does when it has none. */
 function label(node: NormalizedNode): string {
   const name = node.name ?? '';
@@ -44,7 +57,9 @@ export function renderMermaid(campaign: NormalizedCampaign): string {
 
   for (const sequence of campaign.sequences) {
     // An empty sequence is a dead end a reader must not miss.
-    const suffix = sequence.steps.length === 0 ? ' (empty)' : ` (${sequence.steps.length} steps)`;
+    const suffix = doesNothing(sequence.steps)
+      ? ' (empty)'
+      : ` (${sequence.steps.filter((s) => s.style !== 'start').length} steps)`;
     lines.push(`  ${nodeId(sequence.cellId)}["${label(sequence)}${suffix}"]`);
     rendered.add(sequence.cellId);
   }
