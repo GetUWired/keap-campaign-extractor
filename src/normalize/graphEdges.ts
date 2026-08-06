@@ -9,7 +9,8 @@ export type EntityKind =
   | 'webform'
   | 'landingPage'
   | 'product'
-  | 'form';
+  | 'form'
+  | 'user';
 
 export type EdgeKind =
   | 'applies'
@@ -19,6 +20,7 @@ export type EdgeKind =
   | 'sends'
   | 'entry-point'
   | 'references-campaign'
+  | 'assigned-to'
   | 'triggers';
 
 export interface GraphEdge {
@@ -212,14 +214,17 @@ export function tagLabels(campaigns: NormalizedCampaign[]): Map<string, string> 
 /**
  * The lifted foreign keys that have a place in the graph's entity vocabulary.
  *
- * `nodes.ts` lifts 20 foreign-key attributes; these six are the ones the seven
- * EntityKind values can express. The other fourteen — marketingNoteId (94 in
- * the corpus), fileBoxId (43), stageId (37), userId, roundRobinId, eventId,
+ * `nodes.ts` lifts 20 foreign-key attributes; these seven are the ones the
+ * EntityKind values can express. The other thirteen — marketingNoteId (94 in
+ * the corpus), fileBoxId (43), stageId (37), roundRobinId, eventId,
  * marketingFulfillmentId, actionSetId, marketingLetterId, fieldValueFileBoxId,
  * confirmLinkId, voiceBroadcastId, marketingFaxId, createOrderConfigId — are
  * tallied so the warnings say plainly what the graph is not modelling. They
  * remain in the normalised files, so widening this table later costs a re-run
  * and nothing else.
+ *
+ * roundRobinId is deliberately absent despite being assignment-adjacent: a
+ * round-robin is a rule for picking a user, not a user.
  */
 export const REFERENCE_EDGES: Record<string, { kind: EntityKind; edge: EdgeKind }> = {
   marketingEmailId: { kind: 'email', edge: 'sends' },
@@ -227,6 +232,7 @@ export const REFERENCE_EDGES: Record<string, { kind: EntityKind; edge: EdgeKind 
   landingPageId: { kind: 'landingPage', edge: 'entry-point' },
   purchaseId: { kind: 'product', edge: 'entry-point' },
   internalFormId: { kind: 'form', edge: 'entry-point' },
+  userId: { kind: 'user', edge: 'assigned-to' },
   sourceFunnelId: { kind: 'campaign', edge: 'references-campaign' },
 };
 

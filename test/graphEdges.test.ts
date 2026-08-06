@@ -363,3 +363,46 @@ describe('referenceEdges', () => {
     expect(referenceEdges(campaign, 'campaign:1')).toEqual({ edges: [], tallies: {} });
   });
 });
+
+describe('user references', () => {
+  it('maps userId to a user entity via an assigned-to edge', () => {
+    const campaign = makeCampaign({
+      sequences: [
+        makeSequence({
+          steps: [
+            {
+              ...makeNode({
+                cellId: '40',
+                style: 'task',
+                references: { tagIds: [], tagCategoryIds: [], userId: '7' },
+              }),
+              position: 0,
+            },
+          ],
+        }),
+      ],
+    });
+    const harvest = referenceEdges(campaign, 'campaign:16');
+    expect(harvest.edges).toEqual([
+      { from: 'campaign:16', to: 'user:7', kind: 'assigned-to', viaCellId: '40' },
+    ]);
+    expect(harvest.tallies).toEqual({});
+  });
+
+  it('still leaves roundRobinId unmodelled', () => {
+    // A round-robin is a rule for picking a user, not a user. Modelling it as
+    // one would be wrong, so it stays in the tally.
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '9',
+          style: 'task',
+          references: { tagIds: [], tagCategoryIds: [], roundRobinId: '3' },
+        }),
+      ],
+    });
+    const harvest = referenceEdges(campaign, 'campaign:1');
+    expect(harvest.edges).toEqual([]);
+    expect(harvest.tallies['reference attribute "roundRobinId" has no entity kind']).toBe(1);
+  });
+});
