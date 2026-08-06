@@ -231,8 +231,87 @@ App names and funnel ids are interpolated into both URLs and filesystem paths, s
 before use. `--app ../../../etc`, `--app evil.com/x`, `--funnel ../etc` and `--funnel abc` are all
 rejected without launching a browser or creating a directory.
 
-### Verified layout
+### Verified layout (multi-app)
 
 Both campaigns re-extracted under the new structure. Campaign 584 came back at **11,185 chars / 43
 cells — a delta of 0 against the handoff baseline**. `meta.json` now leads with `appName`, so an
 artifact identifies its own origin even if moved. Both runs allowed 0 non-GET requests.
+
+## 9. Campaign enumeration
+
+Added 2026-08-04. The extractor could previously only fetch campaigns whose ids were already known;
+every one extracted came from an id the handoff happened to record.
+
+### The endpoint, and why page size is a GET
+
+The Automations list is a legacy JSP report:
+
+```
+GET /Reports/searchTemplate.jsp?reportClass=SetupFunnel&view=resultsPage&perPage=500
+```
+
+**The UI paginates by POST** — form data (`perPage`, `currentPage`, `pageSet`, `action`,
+`reportClass`, `skin`, `reportStateId`) to `searchTemplate.jsp?view=gridGuts`. The read-only guard
+blocks every non-GET, so the UI's own mechanism is unavailable.
+
+`perPage` is also honoured as a **GET query parameter**, which the default page load does not reveal:
+
+| Request | Rows | `numberOfRecords` |
+|---|---|---|
+| default | 50 | 170 |
+| `&perPage=500` | **170** | 170 |
+
+One read-only request covers the account, so no guard exception was needed. The server mints its own
+`reportStateId`; none has to be supplied. The page's own selector tops out at 500, but a tooltip
+references a 1000-per-page mode if an account ever needs it.
+
+### Results for `jordan`
+
+**170 campaigns. 79 published, 91 never published** — 54% of the account has never been published.
+
+Categories: Old Campaigns 141, ListCleaner.io Campaigns 4, Demo Campaigns 3, WooConnection 1,
+Mesa High 20 Year Reunion 1, ezSMS 1, LinkTracking.com 1. A single catch-all category holds 83% of
+the account, which says more about how the taxonomy is used than about the campaigns.
+
+Cross-validated against the two campaigns extracted directly: 584 reports `published: false` and its
+`publish.xml` is 0 bytes; 987 reports `published: true` and its `publish.xml` is 4,899 chars. Two
+independent sources agreeing.
+
+**Caveat on the live-versus-dead question.** "Never published" is a strong signal, but "published
+years ago and now inert" is the larger category in most accounts and this data cannot see it.
+Separating those needs the reporting activity the handoff describes in §11, which nothing here has
+touched. Treat 91 as a floor on the dead count, not an estimate of it.
+
+### Three defects found, all by running it rather than reading it
+
+1. **The guard did not cover `/Reports/`.** `WRITE_URL_PATTERN` applied only under `/app/`, leaving
+   `GET /Reports/reportActions.jsp?actionName=Unpublish+and+Delete+Automations` — a URL in the
+   Actions menu of the very page enumeration reads — allowed. The denylist now applies to all paths
+   with a static-asset prefix exemption. `/template` is anchored to the end of the path, because an
+   unanchored match blocks `/Reports/searchTemplate.jsp`, the enumeration endpoint itself.
+
+2. **Session expiry was invisible to API requests.** `safeGet` has no `Page`, so
+   `assertAuthenticated` never ran. An expired session returns **HTTP 200 with 55 KB of login
+   markup**, which the parser reported as "the response did not look like the automations list" —
+   sending the reader after a parser bug when the fix was to log in again. `fetchCampaignList` now
+   checks the response's final URL.
+
+3. **A phantom campaign with every column shifted by one.** The data table is nested one row deep
+   inside an outer `grid-table`. A global `$('tr')` scan matched that wrapper row too, and because
+   cheerio's `find()` is recursive it reported every descendant cell — 1191 of them — plus the first
+   data row's link. The first live run returned **171 campaigns against a page reporting 170**, with
+   the campaign name "Untitled automation" appearing in the *category* tally.
+
+   Two things let it through. The fixture had been trimmed of the wrapper, so no test could see it.
+   And the count check was one-sided — it failed on a short read but not an over-count. Both are
+   fixed: the fixture reproduces the nesting exactly, row and cell selection is scoped to the
+   header's own table using direct children, and any disagreement with the page's total now fails,
+   naming which direction it went.
+
+### App URL shapes (open)
+
+The account menu exposes three distinct shapes across linked apps: `sp218.infusionsoft.com`,
+`app.infusionsoft.com?app_id=ro474`, and `keap.app?app_id=qw806`. `baseUrlFor` assumes the first
+only, and would build an unresolvable URL for the other two. Not fixed — it needs a real app of each
+shape to verify against, and `KEAP_BASE_URL` is an escape hatch meanwhile. Worth settling before a
+client migration rather than during one.
