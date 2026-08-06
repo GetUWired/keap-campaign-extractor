@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { EntityCatalogue } from '../src/api/catalogue.js';
 import { buildGraph } from '../src/normalize/graph.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
@@ -361,5 +362,125 @@ describe('findings', () => {
     expect(graph.findings.duplicateTagAppliers).toEqual([
       { tagId: 'tag:419', campaigns: ['campaign:137', 'campaign:321'] },
     ]);
+  });
+});
+
+const catalogue = (entities: EntityCatalogue['entities']): EntityCatalogue => ({
+  appName: 'jordan',
+  fetchedAt: '2026-08-06T00:00:00.000Z',
+  sources: {},
+  entities,
+  warnings: [],
+});
+
+const taggedDecision = (tagId: string, label: string | null) => ({
+  decisionIds: ['479'],
+  flowIds: ['3'],
+  wrappers: [
+    {
+      index: 0,
+      decisionId: '479',
+      flowId: '3',
+      primaryKey: null,
+      secondaryKey: null,
+      secondaryKeyId: null,
+      any: [
+        {
+          groupId: '1',
+          all: [
+            {
+              ruleId: '2',
+              subject: null,
+              subjectLabel: null,
+              category: 'tags_FieldCategory',
+              categoryLabel: null,
+              field: null,
+              fieldLabel: null,
+              constraint: null,
+              constraintLabel: null,
+              values: [{ id: tagId, label }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  elseOptions: [],
+  elseSelected: null,
+  warnings: [],
+});
+
+const emailStep = (cellId: string, id: string) => ({
+  ...makeNode({
+    cellId,
+    style: 'email',
+    references: { tagIds: [], tagCategoryIds: [], marketingEmailId: id },
+  }),
+  position: 0,
+});
+
+describe('buildGraph with a catalogue', () => {
+  it('labels entities from the catalogue', () => {
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '16',
+          sequences: [makeSequence({ steps: [applyStep('10', ['646']), emailStep('25', '1200')] })],
+        }),
+      ],
+      catalogue([
+        { id: 'tag:646', kind: 'tag', name: 'Bought', extra: {} },
+        { id: 'email:1200', kind: 'email', name: 'Welcome 1', extra: { subject: 'Hello' } },
+      ]),
+    );
+    expect(graph.entities.find((e) => e.id === 'tag:646')?.label).toBe('Bought');
+    expect(graph.entities.find((e) => e.id === 'email:1200')?.label).toBe('Welcome 1');
+  });
+
+  it('prefers the catalogue name over a decision-criteria label, and warns on disagreement', () => {
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '1',
+          decisions: [
+            makeDecision({
+              cellId: '34',
+              branches: [{ decisionId: '479', flowId: '3', rules: taggedDecision('346', 'Stale Name') }],
+            }),
+          ],
+        }),
+      ],
+      catalogue([{ id: 'tag:346', kind: 'tag', name: 'Current Name', extra: {} }]),
+    );
+    expect(graph.entities.find((e) => e.id === 'tag:346')?.label).toBe('Current Name');
+    expect(graph.warnings.some((w) => /tag:346.*Stale Name.*Current Name/.test(w))).toBe(true);
+  });
+
+  it('keeps the decision-criteria label for a tag the catalogue does not have', () => {
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '1',
+          decisions: [
+            makeDecision({
+              cellId: '34',
+              branches: [{ decisionId: '479', flowId: '3', rules: taggedDecision('346', 'Only Name') }],
+            }),
+          ],
+        }),
+      ],
+      catalogue([]),
+    );
+    expect(graph.entities.find((e) => e.id === 'tag:346')?.label).toBe('Only Name');
+    expect(graph.warnings.filter((w) => /tag:346/.test(w))).toEqual([]);
+  });
+
+  it('never overwrites a campaign label with a catalogue entry', () => {
+    // campaign.name comes from meta.json and is authoritative.
+    const graph = buildGraph(
+      [makeCampaign({ funnelId: '16', name: 'Real Campaign Name' })],
+      catalogue([{ id: 'campaign:16', kind: 'campaign', name: 'API Name', extra: {} }]),
+    );
+    expect(graph.entities.find((e) => e.id === 'campaign:16')?.label).toBe('Real Campaign Name');
   });
 });

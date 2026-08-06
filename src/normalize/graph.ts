@@ -1,3 +1,4 @@
+import type { EntityCatalogue } from '../api/catalogue.js';
 import type { NormalizedCampaign } from './campaign.js';
 import {
   type EdgeKind,
@@ -176,7 +177,10 @@ export function computeFindings(
   };
 }
 
-export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
+export function buildGraph(
+  campaigns: NormalizedCampaign[],
+  catalogue?: EntityCatalogue,
+): AccountGraph {
   const warnings: string[] = [];
 
   const usable: { campaign: NormalizedCampaign; from: string }[] = [];
@@ -216,6 +220,25 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
   const entities = new Map<string, GraphEntity>();
   const touchedBy = new Map<string, Set<string>>();
 
+  // Catalogue names win over decision-criteria labels: the criteria label is a
+  // snapshot taken whenever that decision was last saved, while the catalogue is
+  // what the account says today. Disagreement is worth seeing, though — six tags
+  // in the corpus carry both, a free cross-check between two independent
+  // sources, the same class of check that validated the 131-tag count.
+  const catalogued = new Map((catalogue?.entities ?? []).map((entry) => [entry.id, entry]));
+
+  const labelFor = (id: string, fallback: string | null): string | null => {
+    const record = catalogued.get(id);
+    if (record?.name == null) return fallback;
+    if (fallback !== null && fallback !== record.name) {
+      warnings.push(
+        `${id}: decision criteria say "${fallback}" but the catalogue says ` +
+          `"${record.name}" — using the catalogue`,
+      );
+    }
+    return record.name;
+  };
+
   const register = (id: string, label: string | null): void => {
     if (!entities.has(id)) entities.set(id, { id, kind: kindOf(id), label, campaignCount: 0 });
   };
@@ -224,7 +247,10 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
 
   for (const edge of edges) {
     const kind = kindOf(edge.to);
-    register(edge.to, kind === 'tag' ? (labels.get(edge.to.slice(4)) ?? null) : null);
+    register(
+      edge.to,
+      labelFor(edge.to, kind === 'tag' ? (labels.get(edge.to.slice(4)) ?? null) : null),
+    );
     if (edge.from === edge.to) continue;
     const touching = touchedBy.get(edge.to) ?? new Set<string>();
     touching.add(edge.from);
@@ -237,7 +263,8 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
   for (const { campaign } of usable) {
     for (const node of campaignNodes(campaign)) {
       for (const tagId of node.references.tagIds) {
-        register(entityId('tag', tagId), labels.get(tagId) ?? null);
+        const id = entityId('tag', tagId);
+        register(id, labelFor(id, labels.get(tagId) ?? null));
       }
     }
   }
