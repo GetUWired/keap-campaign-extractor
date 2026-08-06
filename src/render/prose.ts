@@ -19,6 +19,16 @@ const INLINE_REFERENCES: [string, EntityKind][] = [
   ['userId', 'user'],
 ];
 
+/**
+ * Wraps a name in quotes, unless it already contains one.
+ *
+ * Nesting them produces `— "Request our Series "How to sell""`, which reads as
+ * a mistake. The operator's words are never altered; only our delimiters are.
+ */
+function quoted(name: string): string {
+  return name.includes('"') ? name : `"${name}"`;
+}
+
 export interface ProseContext {
   /** entity id → display name. Empty means ids only. */
   names: Map<string, string>;
@@ -27,7 +37,10 @@ export interface ProseContext {
 export function nameIndex(catalog?: EntityCatalog): Map<string, string> {
   const index = new Map<string, string>();
   for (const entity of catalog?.entities ?? []) {
-    if (entity.name !== null) index.set(entity.id, entity.name);
+    // API names carry newlines and entities just as node names do — one real
+    // webform is named 'Request our\nEmail Series\n&quot;How to…&quot;'.
+    // Cleaning here means every consumer gets safe text.
+    if (entity.name !== null) index.set(entity.id, plainText(entity.name));
   }
   return index;
 }
@@ -51,14 +64,25 @@ export function describeNode(node: NormalizedNode, context: ProseContext): strin
     if (tagId === undefined) return `${label} — not configured`;
     const verb = node.config.isApply === 'false' ? 'Removes' : 'Applies';
     const tag = context.names.get(entityId('tag', tagId));
-    return `${verb} tag ${tag === undefined ? tagId : `"${tag}"`}`;
+    return `${verb} tag ${tag === undefined ? tagId : quoted(tag)}`;
+  }
+
+  // A tagApplied goal's entire meaning is the tag it waits for. Campaign 987
+  // has two goals, "Approved" and "Declined", both waiting on the same tag —
+  // invisible unless the tag is named.
+  if (node.style === 'tagApplied') {
+    const [tagId] = node.references.tagIds;
+    const named = name === null ? label : `${label} — ${quoted(name)}`;
+    if (tagId === undefined) return `${named} (not configured)`;
+    const tag = context.names.get(entityId('tag', tagId));
+    return `${named} (waits for ${tag === undefined ? `tag ${tagId}` : quoted(tag)})`;
   }
 
   // A note keeps its body in config.notes rather than name, and that body is
   // HTML — the handoff calls these the highest-signal text in the corpus.
   if (NOTE_STYLES.has(node.style)) {
     const body = plainText(node.config.notes ?? '');
-    if (body === '') return name === null ? label : `${label} — "${name}"`;
+    if (body === '') return name === null ? label : `${label} — ${quoted(name)}`;
     return `Note: ${truncate(body, NOTE_LIMIT)}`;
   }
 
@@ -69,19 +93,21 @@ export function describeNode(node: NormalizedNode, context: ProseContext): strin
     const catalogName =
       typeof emailId === 'string' ? context.names.get(entityId('email', emailId)) : undefined;
     const chosen = name === null || /^untitled/i.test(name) ? (catalogName ?? name) : name;
-    return chosen === null || chosen === undefined ? label : `${label} — "${chosen}"`;
+    return chosen === null || chosen === undefined ? label : `${label} — ${quoted(chosen)}`;
   }
 
   // Everything else: the type, the operator's words, and the entity it points
   // at when we can name it.
   const parts: string[] = [label];
-  if (name !== null) parts.push(`— "${name}"`);
+  if (name !== null) parts.push(`— ${quoted(name)}`);
 
   for (const [attribute, kind] of INLINE_REFERENCES) {
     const value = node.references[attribute];
     if (typeof value !== 'string') continue;
     const resolved = context.names.get(entityId(kind, value));
-    if (resolved !== undefined) parts.push(`(${resolved})`);
+    // A goal is usually named after the form it points at, and repeating it
+    // reads as a mistake: — "Sign up" (Sign up).
+    if (resolved !== undefined && resolved !== name) parts.push(`(${resolved})`);
     break;
   }
 

@@ -53,17 +53,25 @@ function findingsLine(campaign: NormalizedCampaign): string | null {
  */
 function connections(campaign: NormalizedCampaign, graph: AccountGraph): string[] {
   const self = entityId('campaign', campaign.funnelId ?? '');
-  const labelOf = (id: string): string => graph.entities.find((e) => e.id === id)?.label ?? id;
+  // Graph labels come from the catalog too, so they need the same hygiene as
+  // node names — an API name carrying newlines put four broken lines into a page.
+  const labelOf = (id: string): string => {
+    const label = graph.entities.find((e) => e.id === id)?.label;
+    // An unresolved id reads better as "email 2399" than "email:2399".
+    return label === undefined || label === null ? id.replace(':', ' ') : plainText(label);
+  };
 
-  const out: string[] = [];
+  // Deduplicated: two cells pointing at the same tag are one connection. The
+  // per-cell detail lives in Goals and Sequences, where it belongs.
+  const out = new Set<string>();
   for (const edge of graph.edges) {
     if (edge.from === self) {
-      out.push(`- ${EDGE_PHRASING[edge.kind] ?? edge.kind} → ${labelOf(edge.to)}`);
+      out.add(`- ${EDGE_PHRASING[edge.kind] ?? edge.kind} → ${labelOf(edge.to)}`);
     } else if (edge.to === self && edge.kind === 'triggers') {
-      out.push(`- Triggered by ← ${labelOf(edge.from)}`);
+      out.add(`- Triggered by ← ${labelOf(edge.from)}`);
     }
   }
-  return out;
+  return [...out].sort();
 }
 
 /**

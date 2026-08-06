@@ -57,9 +57,10 @@ export function renderMermaid(campaign: NormalizedCampaign): string {
 
   for (const sequence of campaign.sequences) {
     // An empty sequence is a dead end a reader must not miss.
+    const doing = sequence.steps.filter((s) => s.style !== 'start').length;
     const suffix = doesNothing(sequence.steps)
       ? ' (empty)'
-      : ` (${sequence.steps.filter((s) => s.style !== 'start').length} steps)`;
+      : ` (${doing} step${doing === 1 ? '' : 's'})`;
     lines.push(`  ${nodeId(sequence.cellId)}["${label(sequence)}${suffix}"]`);
     rendered.add(sequence.cellId);
   }

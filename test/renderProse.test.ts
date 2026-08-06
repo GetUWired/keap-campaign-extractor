@@ -116,3 +116,77 @@ describe('nameIndex', () => {
     expect(nameIndex(undefined).size).toBe(0);
   });
 });
+
+describe('names arriving from the catalog', () => {
+  it('cleans them, since API names carry newlines and entities too', () => {
+    // A real webform name in this account is
+    // 'Request our\nEmail Series\n&quot;How to generate\nleads online&quot;'.
+    // Appending it raw put an entity and three line breaks into a page.
+    const catalog = {
+      appName: 'jordan',
+      fetchedAt: '2026-08-06T00:00:00.000Z',
+      sources: {},
+      warnings: [],
+      entities: [
+        {
+          id: 'webform:681',
+          kind: 'webform' as const,
+          name: 'Request our\nEmail Series\n&quot;How to sell&quot;',
+          extra: {},
+        },
+      ],
+    } satisfies EntityCatalog;
+    expect(nameIndex(catalog).get('webform:681')).toBe('Request our Email Series "How to sell"');
+  });
+
+  it('does not wrap a name in quotes when it already contains one', () => {
+    // Otherwise the line reads: — "Request our Series "How to sell"".
+    const goal = node('newsletterRequest', {
+      name: 'Request our Series "How to sell"',
+      refs: { webformId: '681' },
+    });
+    const out = describeNode(goal, ctx());
+    expect(out).toBe('Web form submitted — Request our Series "How to sell"');
+  });
+});
+
+describe('tagApplied goals', () => {
+  it('names the tag it waits for, which is the whole point of the goal', () => {
+    // Campaign 987 has goals named "Approved" and "Declined" that BOTH listen
+    // for tag 1019. Without naming the tag the page cannot show that they are
+    // the same trigger.
+    const goal = node('tagApplied', { name: 'Approved', refs: { tagIds: ['1019'] } });
+    expect(describeNode(goal, ctx([['tag:1019', '0 - 50 New Contacts']]))).toBe(
+      'Tag applied (goal) — "Approved" (waits for "0 - 50 New Contacts")',
+    );
+  });
+
+  it('falls back to the tag id when the catalog cannot name it', () => {
+    const goal = node('tagApplied', { name: 'Approved', refs: { tagIds: ['1019'] } });
+    expect(describeNode(goal, ctx())).toBe('Tag applied (goal) — "Approved" (waits for tag 1019)');
+  });
+
+  it('says so when it waits for nothing', () => {
+    expect(describeNode(node('tagApplied', { name: 'Approved' }), ctx())).toBe(
+      'Tag applied (goal) — "Approved" (not configured)',
+    );
+  });
+});
+
+describe('redundant references', () => {
+  it('omits the entity name when it just repeats the node name', () => {
+    // A web form goal is usually named after its form, so both together read
+    // as: Web form submitted — "Sign up" (Sign up).
+    const goal = node('newsletterRequest', { name: 'Sign up', refs: { webformId: '681' } });
+    expect(describeNode(goal, ctx([['webform:681', 'Sign up']]))).toBe(
+      'Web form submitted — "Sign up"',
+    );
+  });
+
+  it('still shows it when the two genuinely differ', () => {
+    const goal = node('newsletterRequest', { name: 'Request E-Book', refs: { webformId: '681' } });
+    expect(describeNode(goal, ctx([['webform:681', 'E-Book form']]))).toBe(
+      'Web form submitted — "Request E-Book" (E-Book form)',
+    );
+  });
+});

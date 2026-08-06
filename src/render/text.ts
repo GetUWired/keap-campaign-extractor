@@ -64,9 +64,17 @@ export function stripTags(text: string): string {
     .replace(/<[^>]*>/g, '');
 }
 
-/** Decode, strip, collapse. The standard treatment for any text from Keap. */
+/**
+ * Decode, strip, collapse. The standard treatment for any text from Keap.
+ *
+ * `~br~` is Keap's own line-break token. `cleanName` removes it from names
+ * parsed out of the XML, but catalog names come from the REST API and never
+ * pass through it, so it has to be handled here too.
+ */
 export function plainText(text: string): string {
-  return stripTags(decodeEntities(text)).replace(/\s+/g, ' ').trim();
+  return stripTags(decodeEntities(text.replace(/~br~/g, ' ')))
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**

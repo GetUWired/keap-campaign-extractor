@@ -139,3 +139,14 @@ describe.skipIf(corpusFiles.length === 0)('against every label in the real corpu
     expect(leaks).toEqual([]);
   });
 });
+
+describe('plainText and the ~br~ token', () => {
+  it('strips Keap line-break tokens, which arrive from the API too', () => {
+    // cleanName handles ~br~ for names parsed from XML, but catalog names come
+    // from the REST API and never pass through it — one real webform is named
+    // "WooConnection Beta~br~Tester Application".
+    expect(plainText('WooConnection Beta~br~Tester Application')).toBe(
+      'WooConnection Beta Tester Application',
+    );
+  });
+});
