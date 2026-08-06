@@ -1,5 +1,6 @@
 import type { NormalizedCampaign } from './campaign.js';
 import {
+  type EdgeKind,
   type EntityKind,
   type GraphEdge,
   campaignNodes,
@@ -70,6 +71,50 @@ function compareEdges(a: GraphEdge, b: GraphEdge): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+/** Groups edges of one kind by target, collecting the campaigns on the other end. */
+export function campaignsByTarget(edges: GraphEdge[], kind: EdgeKind): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (edge.kind !== kind) continue;
+    const campaigns = out.get(edge.to) ?? new Set<string>();
+    campaigns.add(edge.from);
+    out.set(edge.to, campaigns);
+  }
+  return out;
+}
+
+/**
+ * The one computed edge kind: A triggers B when A applies a tag B listens for.
+ *
+ * Self-loops are kept. A campaign that applies a tag its own goal listens for
+ * re-enters itself, which is real behaviour worth seeing rather than an
+ * artefact to filter out — 5 of the corpus's 9 triggers are self-loops.
+ */
+export function triggerEdges(observed: GraphEdge[]): GraphEdge[] {
+  const appliers = campaignsByTarget(observed, 'applies');
+  const listeners = campaignsByTarget(observed, 'listens-for');
+  const edges: GraphEdge[] = [];
+
+  for (const [tagEntity, listening] of listeners) {
+    const applying = appliers.get(tagEntity);
+    if (applying === undefined) continue;
+    const tagId = tagEntity.slice(tagEntity.indexOf(':') + 1);
+    for (const applier of applying) {
+      for (const listener of listening) {
+        edges.push({
+          from: applier,
+          to: listener,
+          kind: 'triggers',
+          viaTagId: tagId,
+          derived: true,
+        });
+      }
+    }
+  }
+
+  return dedupeEdges(edges);
+}
+
 export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
   const warnings: string[] = [];
 
@@ -102,6 +147,9 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
     }
   }
   const edges = dedupeEdges(harvested);
+  // Entity registration below is driven by `edges` alone: a triggers edge runs
+  // campaign-to-campaign, and both endpoints are already registered.
+  const derived = triggerEdges(edges);
 
   const labels = tagLabels(usable.map((entry) => entry.campaign));
   const entities = new Map<string, GraphEntity>();
@@ -141,7 +189,7 @@ export function buildGraph(campaigns: NormalizedCampaign[]): AccountGraph {
 
   return {
     entities: [...entities.values()].sort(compareEntities),
-    edges: [...edges].sort(compareEdges),
+    edges: [...edges, ...derived].sort(compareEdges),
     findings: { ...EMPTY_FINDINGS },
     warnings,
   };

@@ -176,3 +176,82 @@ describe('buildGraph edges', () => {
     expect(graph.entities.find((e) => e.id === 'tag:346')?.label).toBe('Mastermind Registered');
   });
 });
+
+describe('derived triggers edges', () => {
+  it('links an applier to a listener through the shared tag', () => {
+    // The design's synthetic two-campaign case: A applies T, B listens for T.
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '16',
+        sequences: [makeSequence({ steps: [applyStep('10', ['346'])] })],
+      }),
+      makeCampaign({ funnelId: '467', goals: [listenGoal('4', ['346'])] }),
+    ]);
+    const triggers = graph.edges.filter((e) => e.kind === 'triggers');
+    expect(triggers).toEqual([
+      {
+        from: 'campaign:16',
+        to: 'campaign:467',
+        kind: 'triggers',
+        viaTagId: '346',
+        derived: true,
+      },
+    ]);
+  });
+
+  it('marks derived edges and leaves observed edges unmarked', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '16',
+        sequences: [makeSequence({ steps: [applyStep('10', ['346'])] })],
+      }),
+      makeCampaign({ funnelId: '467', goals: [listenGoal('4', ['346'])] }),
+    ]);
+    expect(graph.edges.filter((e) => e.derived === true)).toHaveLength(1);
+    expect(
+      graph.edges.filter((e) => e.kind !== 'triggers').every((e) => e.derived === undefined),
+    ).toBe(true);
+  });
+
+  it('keeps a self-trigger, because a campaign applying a tag it listens for is a real loop', () => {
+    // 5 of the corpus's 9 triggers are self-loops.
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '594',
+        goals: [listenGoal('4', ['610'])],
+        sequences: [makeSequence({ steps: [applyStep('10', ['610'])] })],
+      }),
+    ]);
+    expect(graph.edges.filter((e) => e.kind === 'triggers')).toEqual([
+      {
+        from: 'campaign:594',
+        to: 'campaign:594',
+        kind: 'triggers',
+        viaTagId: '610',
+        derived: true,
+      },
+    ]);
+  });
+
+  it('emits one triggers edge per applier-listener-tag triple', () => {
+    const graph = buildGraph([
+      makeCampaign({
+        funnelId: '672',
+        sequences: [makeSequence({ steps: [applyStep('10', ['646'])] })],
+      }),
+      makeCampaign({ funnelId: '670', goals: [listenGoal('4', ['646'])] }),
+      makeCampaign({ funnelId: '674', goals: [listenGoal('4', ['646'])] }),
+    ]);
+    expect(
+      graph.edges
+        .filter((e) => e.kind === 'triggers')
+        .map((e) => `${e.from}->${e.to}`)
+        .sort(),
+    ).toEqual(['campaign:672->campaign:670', 'campaign:672->campaign:674']);
+  });
+
+  it('derives nothing from a tag that is tested but never applied', () => {
+    const graph = buildGraph([makeCampaign({ funnelId: '1', goals: [listenGoal('4', ['999'])] })]);
+    expect(graph.edges.filter((e) => e.kind === 'triggers')).toEqual([]);
+  });
+});
