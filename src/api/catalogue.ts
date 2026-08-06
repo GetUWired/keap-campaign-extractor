@@ -1,5 +1,6 @@
 import { type EntityKind, entityId } from '../normalize/graphEdges.js';
 import { stripLongSuffix } from '../parse/cells.js';
+import { type ApiClient, ApiError } from './client.js';
 
 export interface EntityRecord {
   id: string;
@@ -98,4 +99,131 @@ export function mapRecord(kind: EntityKind, raw: unknown): EntityRecord | null {
   const id = stripLongSuffix(rawId) ?? rawId;
 
   return { id: entityId(kind, id), kind, name: nameOf(record), extra: extraOf(record) };
+}
+
+const PROFILE_PATH = '/crm/rest/v1/account/profile';
+
+/** Every string value anywhere in a nested object, for the identity match. */
+function stringValues(value: unknown, depth = 0): string[] {
+  if (depth > 3) return [];
+  if (typeof value === 'string') return [value];
+  if (value === null || typeof value !== 'object') return [];
+  return Object.values(value as Record<string, unknown>).flatMap((v) => stringValues(v, depth + 1));
+}
+
+/**
+ * Refuses to proceed unless the key belongs to the account we were asked for.
+ *
+ * The multi-app work defends against a session for one tenant pointed at
+ * another tenant's artifacts directory. An admin API key has the same failure
+ * mode and, unlike draftXml, carries no appName to check against.
+ *
+ * Which profile field holds the tenant identity is not documented, so this
+ * searches every string value. On no match it FAILS and lists the profile's
+ * field NAMES — never their values, which are business contact details — so the
+ * operator can say which field to key on. An unknown becomes a self-diagnosing
+ * failure rather than a silent hole.
+ */
+export async function assertAccountIdentity(client: ApiClient, appName: string): Promise<void> {
+  const profile = await client.get(PROFILE_PATH);
+  const needle = appName.toLowerCase();
+
+  if (stringValues(profile).some((value) => value.toLowerCase().includes(needle))) return;
+
+  const fields =
+    profile !== null && typeof profile === 'object'
+      ? Object.keys(profile).sort().join(', ')
+      : '(none)';
+
+  throw new Error(
+    `identity check failed — nothing was written. The account profile this key resolves to ` +
+      `does not mention "${appName}" anywhere. Profile fields available: ${fields}. ` +
+      `If one of those carries the tenant identity, key the check on it.`,
+  );
+}
+
+/** Tries each candidate in order; the first that answers wins. */
+export async function probeKind(
+  client: ApiClient,
+  kind: EntityKind,
+  paths: string[],
+): Promise<{ endpoint: string } | { unavailable: string }> {
+  const tried: string[] = [];
+
+  for (const path of paths) {
+    try {
+      await client.get(path, { limit: '1' });
+      return { endpoint: path };
+    } catch (error) {
+      // 401/403 means the key is wrong, not that the resource is missing.
+      // Reporting that as "unavailable" would hide a broken run behind a shrug.
+      if (error instanceof ApiError && error.status !== 404) throw error;
+      const status = error instanceof ApiError ? error.status : 'error';
+      tried.push(`${path} (${status})`);
+    }
+  }
+
+  return { unavailable: `no candidate endpoint answered: ${tried.join(', ')}` };
+}
+
+export async function fetchCatalogue(
+  client: ApiClient,
+  appName: string,
+): Promise<EntityCatalogue> {
+  await assertAccountIdentity(client, appName);
+
+  const sources: Record<string, KindSource> = {};
+  const entities: EntityRecord[] = [];
+  const warnings: string[] = [];
+  const fetchedBy = new Map<string, EntityKind>();
+
+  for (const { kind, paths } of KIND_CANDIDATES) {
+    const probed = await probeKind(client, kind, paths);
+    if ('unavailable' in probed) {
+      sources[kind] = probed;
+      warnings.push(`${kind}: ${probed.unavailable}`);
+      continue;
+    }
+
+    // webform and form both name /forms as a candidate. Fetching it twice would
+    // not merely duplicate records — it would MINT them, turning every webform
+    // into an identically-numbered internal form that may not exist. Whichever
+    // kind claims the endpoint first keeps it; the other is recorded as not
+    // separately resolvable, and the live probe settles what /forms holds.
+    const owner = fetchedBy.get(probed.endpoint);
+    if (owner !== undefined) {
+      const reason = `${probed.endpoint} is already served as "${owner}" — not separately resolvable`;
+      sources[kind] = { unavailable: reason };
+      warnings.push(`${kind}: ${reason}`);
+      continue;
+    }
+    fetchedBy.set(probed.endpoint, kind);
+
+    const raw = await client.getAll(probed.endpoint);
+    let dropped = 0;
+    let kept = 0;
+
+    for (const item of raw) {
+      const record = mapRecord(kind, item);
+      if (record === null) {
+        dropped++;
+        continue;
+      }
+      entities.push(record);
+      kept++;
+    }
+
+    sources[kind] = { endpoint: probed.endpoint, count: kept };
+    if (dropped > 0) {
+      warnings.push(`${dropped} ${kind} record(s) had no usable id and were dropped`);
+    }
+  }
+
+  if (entities.length === 0) {
+    throw new Error(
+      'no entities fetched from any endpoint — a silent empty catalogue is worse than an error',
+    );
+  }
+
+  return { appName, fetchedAt: new Date().toISOString(), sources, entities, warnings };
 }
