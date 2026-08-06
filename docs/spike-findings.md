@@ -595,3 +595,113 @@ Every figure above was predicted from the corpus before the code was written, an
 reproduced all of them exactly — entity counts, edge counts per kind, and all five findings. Two
 independent derivations agreeing. The run is also byte-deterministic: a second `npm run normalize`
 produces an identical `graph.json`.
+
+## 13. REST API enrichment
+
+Added 2026-08-06. `artifacts/jordan/entities.json` — 528 entities in 9.7s, joined onto the graph at
+normalise time. Auth is a Service Account Key in `X-Keap-API-Key`; the key is never written to disk,
+logged, or included in an error message.
+
+| Kind | Endpoint | Fetched | Referenced | Labelled |
+|---|---|---|---|---|
+| tag | `/crm/rest/v2/tags` | 131 | 142 | **40** |
+| webform | `/crm/rest/v2/webforms` | 202 | 113 | **63** |
+| email | `/crm/rest/v2/emails/templates` | 136 | 250 | **0** |
+| form | `/crm/rest/v1/forms` | 7 | 16 | **0** |
+| product | `/crm/rest/v2/products` | 36 | 11 | **7** |
+| user | `/crm/rest/v2/users` | 16 | 4 | **3** |
+| landingPage | none exists | — | 60 | **0** |
+
+**113 of 596 non-campaign entities now carry a name**, against the 586 this stage set out to fix.
+That is a modest result, and the reasons are worth more than the number.
+
+### The first run pulled 14,914 sent emails
+
+`/crm/rest/v2/emails` is **sent-email history** — the record of what went to which contact — not the
+campaign email templates that `marketingEmailId` points at. Probed blind, it answered, and the
+catalogue filled with 14,914 records against 250 referenced.
+
+It looked like it worked. 104 of the 250 referenced ids existed in that set, so 40% of campaign email
+steps would have been labelled — every one of them wrong. The tell was that the API returned the
+**same** name for every distinct id sampled, and all 72 email steps carrying a real name disagreed
+with the record sitting at their id. The "matches" were coincidental collisions in a range spanning
+1–30740.
+
+**Campaign email content lives one level down, at `/crm/rest/v2/emails/templates`.** The parent is
+now permanently off the allowlist, anchored so that permitting the child cannot reopen it. The
+catalogue that run produced was deleted.
+
+Two lessons, both already written into the code rather than only here. An endpoint answering `200`
+with plausible data is not evidence it holds what you asked for. And the check that caught it —
+comparing against names the extractor already had — cost nothing and was the only thing standing
+between this and a confidently mislabelled corpus.
+
+### Campaign emails are still unresolved
+
+The templates endpoint is the right resource and returns real, named emails. But **it shares no id
+with any `marketingEmailId`**: template ids run 150–2058 and are mostly odd, campaign email ids run
+1146–2442 and are uniformly even. Zero of 250 match.
+
+So `/emails/templates` is the account's reusable template library, and a campaign email is a
+different record. Nothing is mislabelled — zero overlap means zero false names — but **handoff §14 Q9
+remains open**: the API supplies email templates, and campaign email content is still unresolved.
+
+### `/forms` and `/webforms` are different resources
+
+`/crm/rest/v1/forms` matched 6 of 16 `internalFormId` references and **0 of 113** `webformId`. It
+serves internal forms. An earlier candidate ordering let `webform` claim it first, which would have
+named 113 webforms from 7 unrelated records — the same failure as the email endpoint, caught by the
+same kind of check before it shipped.
+
+Public webforms have their own resource, `/crm/rest/v2/webforms`, which matched 63 of 113.
+
+The 6 internal forms that do match carry **no name field at all**, so they resolve to an entity and
+label nothing. Matched is not the same as named.
+
+### "Not found" and "not looked up" are different claims
+
+The first enriched run reported **465 broken references**. 310 of those were emails and landing
+pages — kinds with no comparable source at all. Reported that way it reads as "310 campaigns point
+at deleted records", which is false; nothing was ever looked up.
+
+A kind now qualifies for broken-reference reporting only once it has proved comparable by matching
+at least one id. The honest figures:
+
+| Finding | Total | By kind |
+|---|---|---|
+| Broken references | **155** | tag 90, webform 50, form 10, product 4, user 1 |
+| Unused account entities | **273** | webform 139, tag 91, product 29, user 13, form 1 |
+
+**90 tags and 50 webforms referenced by campaigns no longer exist in the account.** Against 141
+campaigns filed under "Old Campaigns", that is consistent rather than surprising — and it is the
+fourth independent signal, after 91 never-published campaigns, 365 empty sequences and 10
+unreachable campaigns, all pointing the same way.
+
+The other direction is just as useful for a migration: **273 account entities nothing references**,
+including 139 webforms and 91 tags that exist but are wired to nothing.
+
+### The cross-check paid for itself twice
+
+Six tags carry a label from decision criteria — an entirely independent source, extracted months of
+code earlier. All six agree with the API. Five differ only in that criteria render a tag as
+`Category -> Name` where the API returns the bare name, so the comparison treats that prefix as
+agreement; otherwise five predictable conflicts would have buried any real drift.
+
+That check is what proved the tag join sound, and therefore that 40-of-142 is genuine deletion rather
+than a broken key. It is also what condemned the email join.
+
+### Rate limits — a lower bound, not an answer
+
+Handoff §14 Q10 asked about API rate limits. **Not reached.** The 528-entity run made roughly 13
+requests at the extractor's 250ms throttle with no 429; the earlier 15,103-entity run made about 21,
+including 15 pages of 1,000 records, also with no 429.
+
+That is a lower bound of "at least 4 requests/second sustained, at least 15,000 records", not a
+measured ceiling. State it as such: nothing here establishes where the limit is.
+
+### What remains unnamed
+
+- **250 campaign emails** — the template library does not key by `marketingEmailId`.
+- **60 landing pages** — no endpoint exists on either API version.
+- **16 internal forms** — 6 resolve but carry no name.
+- **102 tags and 50 webforms** — deleted from the account; correctly unnamed.
