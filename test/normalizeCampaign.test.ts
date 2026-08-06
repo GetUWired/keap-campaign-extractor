@@ -80,6 +80,15 @@ describe('orderSteps', () => {
     expect(result.ordered.map((s) => s.cellId)).toEqual(['14']);
     expect(result.verified).toBe(true);
   });
+
+  it('treats an empty sequence as trivially ordered, not as a failure', () => {
+    // 365 of 767 sequences across the account are empty. Reporting each as an
+    // unwalkable order buried the 58 genuine partial walks.
+    const result = orderSteps([], []);
+    expect(result.ordered).toEqual([]);
+    expect(result.verified).toBe(true);
+    expect(result.warning).toBeNull();
+  });
 });
 
 describe('normalizeCampaign against campaign 584', () => {

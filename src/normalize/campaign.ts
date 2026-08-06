@@ -80,6 +80,11 @@ export interface NormalizedCampaign {
 export function orderSteps(steps: NormalizedNode[], edges: RawEdge[]): StepOrder {
   const fallback = (warning: string): StepOrder => ({ ordered: steps, verified: false, warning });
 
+  // An empty sequence is trivially ordered. Reporting it as unwalkable was
+  // wrong and drowned the real signal: 365 of 423 apparent failures across the
+  // account were empty sequences, against 58 genuine partial walks.
+  if (steps.length === 0) return { ordered: [], verified: true, warning: null };
+
   const start = steps.find((s) => s.style === 'start');
   if (!start) return fallback('no start vertex; keeping document order');
 
