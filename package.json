@@ -10,6 +10,7 @@
     "login": "tsx src/auth/login.ts",
     "spike": "tsx src/cli/spike.ts",
     "enumerate": "tsx src/cli/enumerate.ts",
+    "extract-all": "tsx src/cli/extractAll.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
