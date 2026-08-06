@@ -52,6 +52,57 @@ export interface NormalizedNode {
   references: NodeReferences;
 }
 
+/**
+ * Config keys that are status or metadata rather than type-specific settings.
+ *
+ * Everything else on a node is what the operator was supposed to fill in.
+ */
+const STATUS_KEYS = new Set([
+  'initialized',
+  'ready',
+  'published',
+  'broken',
+  'deepCopy',
+  'global',
+  'name',
+  'flowType',
+  'achievementType',
+]);
+
+/**
+ * True when nobody ever filled this node in.
+ *
+ * Keap refuses to publish a campaign containing one — observed live on campaign
+ * 987, where publication required deleting a `task` step whose every field was
+ * empty (`test/fixtures/campaign-987-lifecycle/`). So this is the same
+ * incompleteness Keap's own validator rejects, and it is why so many campaigns
+ * were never published.
+ *
+ * Empty and "0" both count as unset: the deleted step carried
+ * `taskType="" taskAssignToOwner="0"`, so testing for empty strings alone would
+ * have called it configured. Arrays and objectLists are checked too — a
+ * decision keeps its branches in `objectLists`, not `config`, and reading
+ * config alone would condemn every decision in the account.
+ *
+ * Validated against two independently established counts: it flags exactly the
+ * 11 branchless decisions from section 11, and exactly the 58 tag steps that
+ * carry neither `isApply` nor any tag.
+ */
+export function isUnconfigured(node: NormalizedNode): boolean {
+  for (const [key, value] of Object.entries(node.config)) {
+    if (STATUS_KEYS.has(key)) continue;
+    if (value !== '' && value !== '0') return false;
+  }
+  if (node.references.tagIds.length > 0) return false;
+  for (const [key, value] of Object.entries(node.references)) {
+    if (key === 'tagIds' || key === 'tagCategoryIds') continue;
+    if (typeof value === 'string') return false;
+  }
+  if (Object.values(node.lists).some((entries) => entries.length > 0)) return false;
+  if (Object.values(node.objectLists).some((entries) => entries.length > 0)) return false;
+  return true;
+}
+
 export interface RawEdge {
   cellId: string;
   source: string;

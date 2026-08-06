@@ -50,6 +50,7 @@ export function makeCampaign(overrides: Partial<NormalizedCampaign> = {}): Norma
     notes: [],
     edges: [],
     orphans: [],
+    unconfigured: [],
     styleCounts: {},
     warnings: [],
     ...overrides,

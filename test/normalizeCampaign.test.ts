@@ -213,3 +213,37 @@ describe('normalizeCampaign funnelId', () => {
     expect(normalizeCampaign(c584, '', {}).funnelId).toBe('584');
   });
 });
+
+describe('unconfigured node detection', () => {
+  it('flags the task step Keap refused to publish', () => {
+    // Cell 43 in campaign 987: taskType="" taskTitle="" taskAssignToOwner="0".
+    // The operator deleted it rather than configure it, so it exists only here.
+    const readyStage = readFileSync(
+      new URL('./fixtures/campaign-987-lifecycle/2-ready.draft.xml', import.meta.url),
+      'utf8',
+    );
+    const c = normalizeCampaign(readyStage, '', {}, null, '987');
+    expect(c.unconfigured).toContain('43');
+  });
+
+  it('does not flag a node whose settings are filled in', () => {
+    const c = normalizeCampaign(c987, '', {}, null, '987');
+    const tagStep = c.sequences.flatMap((s) => s.steps).find((s) => s.style === 'tag');
+    expect(tagStep).toBeDefined();
+    expect(c.unconfigured).not.toContain(tagStep?.cellId);
+  });
+
+  it('does not flag a decision that has branches', () => {
+    // A decision keeps its routing in objectLists, not config. Reading config
+    // alone would condemn every decision in the account.
+    const c = normalizeCampaign(c987, '', {}, null, '987');
+    expect(c.decisions[0]?.branches.length).toBeGreaterThan(0);
+    expect(c.unconfigured).not.toContain(c.decisions[0]?.cellId);
+  });
+
+  it('never flags structural cells, which have nothing to configure', () => {
+    const c = normalizeCampaign(c584, '', {}, null, '584');
+    const structural = new Set(c.sequences.map((s) => s.cellId));
+    expect(c.unconfigured.filter((id) => structural.has(id))).toEqual([]);
+  });
+});

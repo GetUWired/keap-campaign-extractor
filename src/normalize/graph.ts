@@ -4,6 +4,7 @@ import {
   type EdgeKind,
   type EntityKind,
   type GraphEdge,
+  REFERENCE_EDGES,
   campaignNodes,
   decisionTagEdges,
   dedupeEdges,
@@ -28,8 +29,16 @@ export interface GraphFindings {
   tagsNobodyListensFor: string[];
   sharedEmails: { emailId: string; campaigns: string[] }[];
   duplicateTagAppliers: { tagId: string; campaigns: string[] }[];
-  /** Referenced ids with no entity behind them — broken campaigns. Empty without a catalogue. */
+  /**
+   * Referenced by a step someone marked ready, but absent from the account —
+   * genuine breakage worth chasing. Empty without a catalogue.
+   */
   entitiesNotFound: string[];
+  /**
+   * Absent from the account and referenced only by steps nobody marked ready —
+   * unfinished drafting rather than breakage. Empty without a catalogue.
+   */
+  entitiesNeverBuilt: string[];
   /** Catalogue entities nothing references — dead weight not to migrate. Empty without a catalogue. */
   unusedEntities: string[];
 }
@@ -190,15 +199,36 @@ export function computeFindings(
     if (catalogued.has(id)) comparable.add(kindOfId(id));
   }
 
-  const entitiesNotFound =
+  const missing =
     catalogue === undefined
       ? []
-      : sortIds(
-          [...referenced].filter(
-            (id) =>
-              !id.startsWith('campaign:') && comparable.has(kindOfId(id)) && !catalogued.has(id),
-          ),
+      : [...referenced].filter(
+          (id) => !id.startsWith('campaign:') && comparable.has(kindOfId(id)) && !catalogued.has(id),
         );
+
+  // A missing entity means two different things depending on who pointed at it.
+  // Referenced from a step someone marked ready, it is breakage: the operator
+  // finished the work and the target has since gone. Referenced only from steps
+  // nobody ever marked ready, it was most likely never created — which is also
+  // why those campaigns were never published, since Keap's validator rejects
+  // unfinished steps. Reporting both as "broken" would inflate the count with
+  // abandoned drafting.
+  const referencedByReady = new Set<string>();
+  for (const { campaign } of usable) {
+    for (const node of campaignNodes(campaign)) {
+      if (node.ready !== true) continue;
+      for (const tagId of node.references.tagIds) referencedByReady.add(entityId('tag', tagId));
+      for (const [attribute, value] of Object.entries(node.references)) {
+        if (attribute === 'tagIds' || attribute === 'tagCategoryIds') continue;
+        if (typeof value !== 'string') continue;
+        const mapping = REFERENCE_EDGES[attribute];
+        if (mapping !== undefined) referencedByReady.add(entityId(mapping.kind, value));
+      }
+    }
+  }
+
+  const entitiesNotFound = sortIds(missing.filter((id) => referencedByReady.has(id)));
+  const entitiesNeverBuilt = sortIds(missing.filter((id) => !referencedByReady.has(id)));
 
   const unusedEntities =
     catalogue === undefined
@@ -210,6 +240,7 @@ export function computeFindings(
   return {
     unreachableCampaigns,
     entitiesNotFound,
+    entitiesNeverBuilt,
     unusedEntities,
     tagsAppliedByNobody: sortIds(tagEntityIds.filter((id) => !appliers.has(id))),
     tagsNobodyListensFor: sortIds(

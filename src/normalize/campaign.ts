@@ -1,6 +1,12 @@
 import { parseIdentity } from '../parse/cells.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
-import { type NormalizedNode, type ParsedGraph, type RawEdge, parseNodes } from './nodes.js';
+import {
+  type NormalizedNode,
+  type ParsedGraph,
+  type RawEdge,
+  isUnconfigured,
+  parseNodes,
+} from './nodes.js';
 
 /**
  * Every style observed across the 170-campaign corpus.
@@ -26,6 +32,9 @@ const KNOWN_STYLES = new Set([
 ]);
 
 const NOTE_STYLES = new Set(['notes', 'note']);
+
+/** Containers and connectors: nothing about them is the operator's to fill in. */
+const STRUCTURAL_STYLES = new Set(['flow', 'edge', 'start', '(none)']);
 
 export interface StepOrder {
   ordered: NormalizedNode[];
@@ -61,6 +70,8 @@ export interface NormalizedCampaign {
   notes: NormalizedNode[];
   edges: RawEdge[];
   orphans: string[];
+  /** Cell ids nobody ever filled in — the incompleteness Keap refuses to publish. */
+  unconfigured: string[];
   styleCounts: Record<string, number>;
   warnings: string[];
 }
@@ -216,6 +227,11 @@ export function normalizeCampaign(
     notes,
     edges: graph.edges,
     orphans,
+    // Structural containers are excluded: a flow or an edge has nothing to
+    // configure, so calling them unconfigured would be noise.
+    unconfigured: graph.nodes
+      .filter((n) => !STRUCTURAL_STYLES.has(n.style) && isUnconfigured(n))
+      .map((n) => n.cellId),
     styleCounts: graph.styleCounts,
     warnings,
   };

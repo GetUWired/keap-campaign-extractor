@@ -486,14 +486,24 @@ describe('buildGraph with a catalogue', () => {
 });
 
 describe('catalogue findings', () => {
+  const readyEmailStep = (cellId: string, id: string) => ({
+    ...emailStep(cellId, id),
+    ready: true,
+  });
+
   it('reports a referenced entity the catalogue does not contain', () => {
     // A campaign pointing at a deleted email is a broken campaign — but only
-    // once the kind has proved comparable by matching at least one id.
+    // once the kind has proved comparable by matching at least one id, and only
+    // when a step someone marked ready is what points at it.
     const graph = buildGraph(
       [
         makeCampaign({
           funnelId: '16',
-          sequences: [makeSequence({ steps: [emailStep('25', '1200'), emailStep('26', '1300')] })],
+          sequences: [
+            makeSequence({
+              steps: [readyEmailStep('25', '1200'), readyEmailStep('26', '1300')],
+            }),
+          ],
         }),
       ],
       catalogue([
@@ -502,6 +512,28 @@ describe('catalogue findings', () => {
       ]),
     );
     expect(graph.findings.entitiesNotFound).toEqual(['email:1200']);
+    expect(graph.findings.entitiesNeverBuilt).toEqual([]);
+  });
+
+  it('separates a never-finished reference from genuine breakage', () => {
+    // Same missing entity, but pointed at by a step nobody marked ready. That
+    // is abandoned drafting, not something that broke — and counting it as
+    // breakage is what inflated the original 465.
+    const graph = buildGraph(
+      [
+        makeCampaign({
+          funnelId: '16',
+          sequences: [
+            makeSequence({
+              steps: [emailStep('25', '1200'), readyEmailStep('26', '1300')],
+            }),
+          ],
+        }),
+      ],
+      catalogue([{ id: 'email:1300', kind: 'email', name: 'Still here', extra: {} }]),
+    );
+    expect(graph.findings.entitiesNotFound).toEqual([]);
+    expect(graph.findings.entitiesNeverBuilt).toEqual(['email:1200']);
   });
 
   it('reports a catalogue entity nothing references', () => {
@@ -544,6 +576,7 @@ describe('findings only claim what was actually looked up', () => {
     makeNode({
       cellId,
       style: 'newsletterRequest',
+      ready: true,
       references: { tagIds: [], tagCategoryIds: [], webformId: id },
     });
 

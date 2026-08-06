@@ -74,6 +74,8 @@ async function main(): Promise<void> {
   const ids = args.funnelId !== null ? [args.funnelId] : (await readdir(campaignsDir)).sort();
   const allWarnings: string[] = [];
   const normalized: NormalizedCampaign[] = [];
+  let unconfiguredNodes = 0;
+  let campaignsWithUnconfigured = 0;
   const unverifiedSequences: string[] = [];
   let written = 0;
   let skipped = 0;
@@ -117,6 +119,8 @@ async function main(): Promise<void> {
       await writeFile(join(outDir, `${funnelId}.json`), JSON.stringify(campaign, null, 2), 'utf8');
       written++;
       normalized.push(campaign);
+      unconfiguredNodes += campaign.unconfigured.length;
+      if (campaign.unconfigured.length > 0) campaignsWithUnconfigured++;
 
       for (const warning of campaign.warnings) allWarnings.push(`${funnelId}: ${warning}`);
       for (const sequence of campaign.sequences) {
@@ -146,6 +150,10 @@ async function main(): Promise<void> {
       `${unknownStyles.size > 0 ? ` — ${[...unknownStyles].join(', ')}` : ''}`,
   );
   console.log(`  sequences whose order could not be walked: ${unverifiedSequences.length}`);
+  console.log(
+    `  unconfigured nodes: ${unconfiguredNodes}` +
+      ` across ${campaignsWithUnconfigured} campaign(s) — Keap will not publish these`,
+  );
   if (unverifiedSequences.length > 0) {
     console.log(
       `    ${unverifiedSequences.slice(0, 10).join(', ')}` +
@@ -197,6 +205,7 @@ async function main(): Promise<void> {
   console.log(`  shared emails:           ${graph.findings.sharedEmails.length}`);
   console.log(`  duplicate tag appliers:  ${graph.findings.duplicateTagAppliers.length}`);
   console.log(`  broken references:       ${graph.findings.entitiesNotFound.length}`);
+  console.log(`  never-built references:  ${graph.findings.entitiesNeverBuilt.length}`);
   console.log(`  unused account entities: ${graph.findings.unusedEntities.length}`);
   for (const warning of graph.warnings) console.log(`  warning: ${warning}`);
   console.log(`  output: ${graphPath}\n`);

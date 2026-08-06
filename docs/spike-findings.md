@@ -777,8 +777,32 @@ unconfigured steps, so unconfigured steps survive mainly in campaigns that were 
 those steps' references were never real entities to begin with. **A campaign is not missing entities
 because it is unpublished; it is unpublished because it still contains steps nobody finished.**
 
-Consequence for the graph: some part of the 155 "broken references" is unfinished drafting rather
-than breakage, and the graph currently cannot tell a reader which.
+Consequence for the graph, now acted on: the 155 "broken references" were two different things, and
+splitting them by whether a *ready* step is what points at the missing entity gives
+
+| | |
+|---|---|
+| **87** referenced by a step someone marked ready | genuine breakage, worth chasing |
+| **68** referenced only by steps nobody marked ready | abandoned drafting, not breakage |
+
+Nearly half the apparent breakage was never breakage.
+
+### Unconfigured steps, detected structurally
+
+`isUnconfigured` in `nodes.ts` flags a node with no type-specific setting, no reference, and no
+non-empty array — the same incompleteness Keap's validator rejects. Empty and `"0"` both count as
+unset, because the deleted step carried `taskType=""` *and* `taskAssignToOwner="0"`; testing for
+empty strings alone would have called it configured. Arrays and `objectLists` are checked too, since
+a decision keeps its branches there rather than in `config`.
+
+The rule was validated against three independent facts rather than by inspection:
+
+- it flags cell 43, the step Keap refused to publish, in the preserved fixture;
+- it flags **exactly the 11 branchless decisions** from section 11;
+- it flags **exactly the 58 tag steps** carrying neither `isApply` nor any tag.
+
+Across the account: **720 unconfigured nodes in 116 of 170 campaigns.** None of those campaigns can
+be published as they stand.
 
 ### Readiness is the sharpest live-versus-dead signal yet
 
