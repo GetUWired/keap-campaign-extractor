@@ -30,6 +30,14 @@ export const FK_ATTRIBUTES = [
   'marketingFaxId',
   'createOrderConfigId',
   'roundRobinId',
+  // Newer builders, found in se232. Lifting them is what makes the reference
+  // rule in render/labels.ts able to fire at all: an attribute that is never
+  // lifted can never be matched, and these were silently dead.
+  'unlayerLandingPageId',
+  'smartFormInstanceId',
+  'marketingAutomatedSmsId',
+  'automationMessageId',
+  'httpRequestConfigId',
 ] as const;
 
 export interface NodeReferences {

@@ -112,3 +112,24 @@ describe('TOOL_LABELS', () => {
     }
   });
 });
+
+describe('typeLabel — generations confirmed against the builder', () => {
+  it('names the older web-tracking goal as a legacy generation', () => {
+    // `website` is the earlier form of `websiteTrigger`: tracking code on your
+    // own pages detecting a contact visiting. All 16 instances are unconfigured.
+    expect(typeLabel(node('website'))).toBe('Web Page automation (Legacy)');
+    expect(typeLabel(node('websiteTrigger'))).toBe('Web Page automation');
+  });
+
+  it('reads a smart form as a web form, via the reference that was previously dead', () => {
+    // smartFormInstanceId was in REFERENCE_TOOLS but never in FK_ATTRIBUTES, so
+    // it was never lifted and the rule could never match.
+    expect(typeLabel(node('smartForm', { smartFormInstanceId: '55' }))).toBe('Web Form submitted');
+  });
+
+  it('reads the new landing page builder, likewise', () => {
+    expect(typeLabel(node('unlayerLandingPage', { unlayerLandingPageId: '9' }))).toBe(
+      'Landing Page',
+    );
+  });
+});

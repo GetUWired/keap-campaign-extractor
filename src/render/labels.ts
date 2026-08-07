@@ -45,6 +45,10 @@ export const TOOL_LABELS: Record<string, string> = {
   tagApplied: 'Tag applied',
   linkClick: 'Email Link clicked',
   websiteTrigger: 'Web Page automation',
+  // The older generation of the same thing: tracking code on your own web
+  // properties detecting a contact visiting a page. All 16 instances carry no
+  // configuration at all, which is why it was never obvious what it was.
+  website: 'Web Page automation (Legacy)',
   taskComplete: 'Task completed',
   noteApplied: 'Note applied',
   scoreAchieved: 'Lead Score achieved',
