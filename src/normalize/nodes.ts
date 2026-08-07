@@ -38,6 +38,23 @@ export interface NodeReferences {
   [key: string]: string | string[] | undefined;
 }
 
+/**
+ * A reference as a list, whichever shape it was stored in.
+ *
+ * The same foreign key arrives as a scalar attribute in one account and as an
+ * `<Array as="…">` in another — 361 purchase goals in se232 carry
+ * `<Array as="purchaseId">` and not one carries the scalar. Storing each
+ * faithfully keeps the artifact honest; reading through here means no consumer
+ * has to know which shape it got, and none can silently skip the array form the
+ * way `typeof value === 'string'` checks did.
+ */
+export function referenceValues(references: NodeReferences, attribute: string): string[] {
+  const value = references[attribute];
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value;
+  return [];
+}
+
 export interface NormalizedNode {
   cellId: string;
   style: string;
@@ -225,6 +242,16 @@ export function parseNodes(draftXml: string): ParsedGraph {
       tagCategoryIds: lists.tagCategoryIds ?? [],
     };
     for (const key of FK_ATTRIBUTES) {
+      // A foreign key can arrive either as an attribute or as an <Array as="…">.
+      // Both forms occur for the same key across accounts, so both are lifted;
+      // referenceValues() lets consumers read them uniformly.
+      const list = lists[key];
+      if (list !== undefined && list.length > 0) {
+        const values = list.map((v) => stripLongSuffix(v)).filter((v): v is string => v !== null);
+        if (values.length > 0) references[key] = values;
+        continue;
+      }
+
       const raw = config[key];
       if (raw === undefined) continue;
       const stripped = stripLongSuffix(raw);

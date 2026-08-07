@@ -1,0 +1,170 @@
+<mxGraphModel>
+  <root>
+    <mxCell id="0">
+      <Object appName="se232" as="value" buildNumber="1.70.0.752995" funnelId="12075L" initialized="1">
+        <Array as="convertersThatRan">
+          <add value="longIds_note"/>
+          <add value="longIds_tag"/>
+          <add value="longIds_tagApplied"/>
+          <add value="converter_purchase"/>
+          <add value="longIds_unlayerEmail"/>
+        </Array>
+      </Object>
+    </mxCell>
+    <mxCell id="1" parent="0"/>
+    <mxCell collapsed="1" id="2" parent="1" style="flow" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" flowType="Stop" initialized="1" name="MBI 2025 sequences" published="0" ready="1"/>
+      <mxGeometry as="geometry" height="64" width="128" x="256" y="240"/>
+    </mxCell>
+    <mxCell edge="1" id="112" parent="2" source="110" style="edge" target="111">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="111" parent="2" style="timerDate" vertex="1">
+      <Object as="value" broken="0" dateType="On" initialized="1" name="Run On 12-30-2024 at 6:00~br~AM" published="0" ready="1" startAmPm="AM" startDay="30" startHour="6" startMinute="0" startMonth="12" startYear="2024" timeOfDayType="At" useContactTimeZone="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="128"/>
+    </mxCell>
+    <mxCell edge="1" id="122" parent="2" source="119" style="edge" target="121">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="123" parent="2" source="121" style="edge" target="9">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="125" parent="2" source="9" style="edge" target="124">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="127" parent="2" source="124" style="edge" target="126">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="110" parent="2" style="start" vertex="1">
+      <Object as="value" broken="0" initialized="1" name="Start" published="0" ready="1"/>
+      <mxGeometry as="geometry" height="64" width="64"/>
+    </mxCell>
+    <mxCell edge="1" id="131" parent="2" source="126" style="edge" target="129">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="133" parent="2" source="129" style="edge" target="132">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="119" parent="2" style="unlayerEmail" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" marketingEmailId="41613" name="Email 1" published="0" ready="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="256"/>
+    </mxCell>
+    <mxCell edge="1" id="135" parent="2" source="111" style="edge" target="119">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="121" parent="2" style="timerDate" vertex="1">
+      <Object as="value" broken="0" dateType="On" initialized="1" name="Run On 12-30-2024 at 10:00~br~AM" published="0" ready="1" startAmPm="AM" startDay="30" startHour="10" startMinute="0" startMonth="12" startYear="2024" timeOfDayType="At" useContactTimeZone="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="384"/>
+    </mxCell>
+    <mxCell id="9" parent="2" style="unlayerEmail" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" marketingEmailId="41607" name="Email 2" published="0" ready="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="512"/>
+    </mxCell>
+    <mxCell id="124" parent="2" style="timerDate" vertex="1">
+      <Object as="value" broken="0" dateType="On" initialized="1" name="Run On 12-31-2024 at 8:00~br~AM" published="0" ready="1" startAmPm="AM" startDay="31" startHour="8" startMinute="0" startMonth="12" startYear="2024" timeOfDayType="At" useContactTimeZone="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="640"/>
+    </mxCell>
+    <mxCell id="126" parent="2" style="unlayerEmail" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" marketingEmailId="41615" name="Email 3" published="0" ready="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="768"/>
+    </mxCell>
+    <mxCell id="129" parent="2" style="timerDate" vertex="1">
+      <Object as="value" broken="0" dateType="On" initialized="1" name="Run On 12-31-2024 at 6:00~br~PM" published="0" ready="1" startAmPm="PM" startDay="31" startHour="6" startMinute="0" startMonth="12" startYear="2024" timeOfDayType="At" useContactTimeZone="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="896"/>
+    </mxCell>
+    <mxCell id="132" parent="2" style="unlayerEmail" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" marketingEmailId="41617" name="Email 4" published="0" ready="0"/>
+      <mxGeometry as="geometry" height="64" width="64" x="1024"/>
+    </mxCell>
+    <mxCell id="34" metaType="purchase" parent="1" style="purchaseSuccess" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" global="0" initialized="1" name="MBI 2025" paymentTypes="Credit Card,Include $0 invoices" published="0" purchaseType="product" ready="1">
+        <Array as="purchaseId">
+          <add value="1785"/>
+          <add value="1729"/>
+          <add value="1773"/>
+        </Array>
+        <Array as="eventId">
+          <add value="1785"/>
+          <add value="1729"/>
+          <add value="1773"/>
+        </Array>
+        <Array as="purchaseOption"/>
+      </Object>
+      <mxGeometry as="geometry" height="64" width="64" x="480" y="240"/>
+    </mxCell>
+    <mxCell edge="1" id="35" parent="1" source="2" style="edge" target="34">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="40" metaType="tagApplied" parent="1" style="tagApplied" vertex="1">
+      <Object achievementType="any" as="value" broken="0" deepCopy="0" global="1" initialized="1" name="Tag" published="0" ready="1">
+        <Array as="tagIds">
+          <add value="15339L"/>
+          <add value="15335L"/>
+          <add value="14267L"/>
+          <add value="14277L"/>
+          <add value="15207L"/>
+          <add value="15215L"/>
+          <add value="15331L"/>
+          <add value="14269L"/>
+          <add value="15219L"/>
+        </Array>
+        <Array as="tagCategoryIds"/>
+      </Object>
+      <mxGeometry as="geometry" height="64" width="64" y="240"/>
+    </mxCell>
+    <mxCell collapsed="1" id="51" parent="1" style="flow" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" flowType="Stop" initialized="1" name="Been thru this funnel~br~of emails or~br~in another funnel at this time" published="0" ready="1"/>
+      <mxGeometry as="geometry" height="64" width="128" x="256" y="384"/>
+    </mxCell>
+    <mxCell id="62" parent="51" style="start" vertex="1">
+      <Object as="value" deepCopy="0" initialized="1" name="Start" published="0" ready="1"/>
+      <mxGeometry as="geometry" height="64" width="64" x="64" y="64"/>
+    </mxCell>
+    <mxCell id="65" parent="1" style="decision" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" published="0" ready="1">
+        <Array as="decisions">
+          <Object decisionId="5687L" flowId="2"/>
+          <Object decisionId="5689L" flowId="51"/>
+        </Array>
+      </Object>
+      <mxGeometry as="geometry" height="32" width="32" x="128" y="256"/>
+    </mxCell>
+    <mxCell edge="1" id="66" parent="1" source="40" style="edge" target="65">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="67" parent="1" source="65" style="edge" target="2">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="68" parent="1" source="65" style="edge" target="51">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell id="87" metaType="websiteTrigger" parent="1" style="websiteTrigger" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" global="1" initialized="1" name="MBI Sales Page" published="0" ready="1">
+        <Array as="urlIds">
+          <add value="1079L"/>
+          <add value="1081L"/>
+          <add value="1083L"/>
+        </Array>
+      </Object>
+      <mxGeometry as="geometry" height="64" width="64" y="384"/>
+    </mxCell>
+    <mxCell id="90" parent="1" style="decision" vertex="1">
+      <Object as="value" broken="0" deepCopy="0" initialized="1" published="0" ready="1">
+        <Array as="decisions">
+          <Object decisionId="5691L" flowId="2"/>
+          <Object decisionId="5693L" flowId="51"/>
+        </Array>
+      </Object>
+      <mxGeometry as="geometry" height="32" width="32" x="128" y="400"/>
+    </mxCell>
+    <mxCell edge="1" id="91" parent="1" source="87" style="edge" target="90">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="92" parent="1" source="90" style="edge" target="2">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+    <mxCell edge="1" id="93" parent="1" source="90" style="edge" target="51">
+      <mxGeometry as="geometry" relative="1"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

@@ -1,4 +1,4 @@
-import type { NormalizedNode } from '../normalize/nodes.js';
+import { type NormalizedNode, referenceValues } from '../normalize/nodes.js';
 
 /**
  * What each tool is called, using the wording on the campaign-builder toolbars.
@@ -75,15 +75,6 @@ export const REFERENCE_TOOLS: [string, string][] = [
   ['stageId', 'Opportunity Stage moved'],
 ];
 
-/** A reference value, whether it arrives as a scalar attribute or an array. */
-function hasReference(node: NormalizedNode, attribute: string): boolean {
-  if (typeof node.references[attribute] === 'string') return true;
-  // 361 purchase goals in se232 carry their products in <Array as="purchaseId">
-  // and none carry the scalar, so reading attributes alone misses them all.
-  const list = node.lists[attribute];
-  return Array.isArray(list) && list.length > 0;
-}
-
 /**
  * What this node does, in the words the campaign builder uses.
  *
@@ -97,7 +88,7 @@ export function typeLabel(node: NormalizedNode): string {
   if (tool !== undefined) return tool;
 
   for (const [attribute, label] of REFERENCE_TOOLS) {
-    if (hasReference(node, attribute)) return label;
+    if (referenceValues(node.references, attribute).length > 0) return label;
   }
   if (node.references.tagIds.length > 0) return 'Tag applied';
 

@@ -1,6 +1,6 @@
 import type { EntityCatalog } from '../api/catalog.js';
 import { type EntityKind, entityId } from '../normalize/graphEdges.js';
-import type { NormalizedNode } from '../normalize/nodes.js';
+import { type NormalizedNode, referenceValues } from '../normalize/nodes.js';
 import { typeLabel } from './labels.js';
 import { plainText, truncate } from './text.js';
 
@@ -102,12 +102,14 @@ export function describeNode(node: NormalizedNode, context: ProseContext): strin
   if (name !== null) parts.push(`— ${quoted(name)}`);
 
   for (const [attribute, kind] of INLINE_REFERENCES) {
-    const value = node.references[attribute];
-    if (typeof value !== 'string') continue;
-    const resolved = context.names.get(entityId(kind, value));
+    const values = referenceValues(node.references, attribute);
+    if (values.length === 0) continue;
+    const resolved = values
+      .map((value) => context.names.get(entityId(kind, value)))
+      .filter((label): label is string => label !== undefined && label !== name);
     // A goal is usually named after the form it points at, and repeating it
     // reads as a mistake: — "Sign up" (Sign up).
-    if (resolved !== undefined && resolved !== name) parts.push(`(${resolved})`);
+    if (resolved.length > 0) parts.push(`(${resolved.join(', ')})`);
     break;
   }
 

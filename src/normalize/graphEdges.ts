@@ -1,6 +1,6 @@
 import type { RuleValue } from '../parse/decisionHtml.js';
 import type { NormalizedCampaign } from './campaign.js';
-import type { NormalizedNode } from './nodes.js';
+import { type NormalizedNode, referenceValues } from './nodes.js';
 
 export type EntityKind =
   | 'campaign'
@@ -242,25 +242,31 @@ export function referenceEdges(campaign: NormalizedCampaign, from: string): Edge
   const tallies: Record<string, number> = {};
 
   for (const node of campaignNodes(campaign)) {
-    for (const [attribute, value] of Object.entries(node.references)) {
+    for (const attribute of Object.keys(node.references)) {
       // tagIds and tagCategoryIds are the two array-valued members of
       // NodeReferences; tags are tagEdges' business, not this function's.
       if (attribute === 'tagIds' || attribute === 'tagCategoryIds') continue;
-      if (typeof value !== 'string') continue;
+
+      // One edge per value: a purchase goal can name several products, and
+      // reading only the scalar form once hid 390 of them.
+      const values = referenceValues(node.references, attribute);
+      if (values.length === 0) continue;
 
       const mapping = REFERENCE_EDGES[attribute];
       if (mapping === undefined) {
         const reason = `reference attribute "${attribute}" has no entity kind`;
-        tallies[reason] = (tallies[reason] ?? 0) + 1;
+        tallies[reason] = (tallies[reason] ?? 0) + values.length;
         continue;
       }
 
-      edges.push({
-        from,
-        to: entityId(mapping.kind, value),
-        kind: mapping.edge,
-        viaCellId: node.cellId,
-      });
+      for (const value of values) {
+        edges.push({
+          from,
+          to: entityId(mapping.kind, value),
+          kind: mapping.edge,
+          viaCellId: node.cellId,
+        });
+      }
     }
   }
 

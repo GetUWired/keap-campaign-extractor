@@ -2,12 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TOOL_LABELS, typeLabel } from '../src/render/labels.js';
 import { makeNode } from './fixtures/graphFixtures.js';
 
-const node = (
-  style: string,
-  references: Record<string, string> = {},
-  lists: Record<string, string[]> = {},
-) =>
-  makeNode({ style, lists, references: { tagIds: [], tagCategoryIds: [], ...references } });
+const node = (style: string, references: Record<string, string | string[]> = {}) =>
+  makeNode({ style, references: { tagIds: [], tagCategoryIds: [], ...references } });
 
 describe('typeLabel — styles that are genuinely tools', () => {
   it('uses the toolbar wording', () => {
@@ -32,7 +28,7 @@ describe('typeLabel — styles that are genuinely tools', () => {
   it('lets a tag step stay a tag step even though it references tags', () => {
     // Style must win here: the reference rule would otherwise call an
     // apply-tag STEP a "Tag applied" GOAL.
-    const step = node('tag', {}, {});
+    const step = node('tag');
     step.references.tagIds = ['646'];
     expect(typeLabel(step)).toBe('Apply/Remove Tags');
   });
@@ -84,9 +80,7 @@ describe('typeLabel — array-valued references', () => {
   it('reads a purchase goal whose products arrive as an array', () => {
     // 361 purchase goals in se232 carry <Array as="purchaseId"> and NONE carry
     // the scalar. Reading attributes alone mislabels every one of them.
-    expect(typeLabel(node('purchaseSuccess', {}, { purchaseId: ['1753'] }))).toBe(
-      'Product purchased',
-    );
+    expect(typeLabel(node('purchaseSuccess', { purchaseId: ['1753'] }))).toBe('Product purchased');
   });
 
   it('still reads the scalar form, which is what jordan uses', () => {
@@ -94,7 +88,7 @@ describe('typeLabel — array-valued references', () => {
   });
 
   it('ignores an empty array rather than treating it as a reference', () => {
-    expect(typeLabel(node('purchaseSuccess', {}, { purchaseId: [] }))).toBe('Goal (unconfigured)');
+    expect(typeLabel(node('purchaseSuccess', { purchaseId: [] }))).toBe('Goal (unconfigured)');
   });
 });
 
