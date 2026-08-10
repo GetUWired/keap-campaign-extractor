@@ -921,3 +921,140 @@ The median campaign has 14 renderable nodes; the largest has 112 and 86 steps. D
 campaign level only — goals, decisions and sequences — so campaign 751 renders as 10 goals, 2
 decisions and 14 sequence boxes rather than a hairball. Steps are linear by construction and read
 better as an ordered list, which the page provides.
+
+## 16. A second account — and the correction of almost everything before it
+
+Added 2026-08-06. `se232` extracted, normalized, graphed and rendered: **398 campaigns**, the account
+the handoff was written about. `jordan` was the rehearsal.
+
+**Read §9–15 with this section beside them.** Every figure in them was n=1, and `jordan` turns out to
+be an abandoned personal account. Where the two agree we have learned something about Keap; where
+they diverge, the earlier text describes Jordan rather than the product. The divergences are large.
+
+| | jordan | se232 |
+|---|---|---|
+| campaigns | 170 | 398 |
+| never published | 90 (53%) | 63 (16%) |
+| sequences doing nothing | 393 (51%) | 306 (17%) |
+| sequences marked ready | 158 (21%) | 1,663 (94%) |
+| campaigns with no ready sequence | 102 (60%) | 19 (5%) |
+| unconfigured nodes | 720 | 92 |
+| decisions | 85 | 464 |
+| **trigger edges** | **9** | **621** |
+
+### The read-only guard stopped 95 writes to live campaigns
+
+The clearest result of the day, and it retires "precaution" as a description of the guard.
+
+| blocked, per account | jordan | se232 |
+|---|---|---|
+| `PUT /app/funnel/<id>` | 10 | **85** |
+| `POST /app/funnel/editor` | 29 | 153 |
+| `POST /app/editorLockout/unlock` | 10 | 85 |
+| `PUT /app/funnel/update_builder_preference` | 31 | 156 |
+| total writes to the tenant | 83 | **479** |
+
+The handoff warned that "writes are one click away". They are closer than that: **the campaign
+builder attempts to write to a campaign merely being looked at, on page load.** Without the
+driver-level guard this tool would have issued 85 PUTs against a live client's campaigns during a
+single read-only run.
+
+It fires on 6% of `jordan`'s campaigns and 21% of `se232`'s — not deterministic per page load, so a
+two-campaign spike would have shown nothing at all.
+
+### Opening an imported campaign destroys its provenance
+
+Nine `se232` campaigns are imports from other Keap apps (`mrz166` ×8, `it285` ×1), published in
+through campaign sharing. Their `draftXml` keeps the **originating app and original funnelId**
+forever, while the importing account assigns its own id.
+
+The identity check failed all nine, correctly by its old rule and wrongly in substance: the fetch
+had succeeded and the data was in hand. The discriminator is now
+
+- appName differs, funnelId **matches** → wrong host. Still fails. This is the §8 scenario.
+- appName differs, funnelId **differs** → import. Accepted, with `importedFrom` recorded.
+
+A wrong-host run asks for funnel X and receives funnel X; an import can never match on both.
+
+**Then a natural experiment nobody designed.** Between two runs, two of the nine were opened in the
+Keap UI. Those two — and only those two — came back re-stamped with `se232`'s own app name and id.
+Our extraction had touched all nine, twice, and changed none of them.
+
+**Opening an imported campaign in the builder rewrites its provenance. Reading it with this tool does
+not.** Seven of the nine still carry `mrz166`. That evidence is one-shot: it exists only until
+somebody clicks.
+
+### "Published" is three states, not two
+
+§10 concluded that `publishXml` is authoritative over the list page's Published Date. That was right
+about which artifact is real and wrong about which question each answers.
+
+| | jordan | se232 |
+|---|---|---|
+| currently live (both signals) | 79 | 210 |
+| **published, then stopped** | 1 | **125** |
+| never published (neither) | 90 | 63 |
+
+`publishXml` answers *has this ever been published*; the list's date answers *is it live now*. On
+`jordan` they agreed within one campaign because nothing was ever switched off. On an active account
+they diverge by **31% of the account**.
+
+This partially reopens §9, which declared "published years ago and now inert" invisible without
+activity data. A campaign that was published and then deliberately **turned off** is detectable, and
+is 125 campaigns here. Only "still live but unvisited" remains invisible.
+
+### The sharpest cross-account result
+
+**Roughly half of every account is not currently live — 53% of `jordan`, 47% of `se232`.** The
+proportion is stable; the composition is opposite. `jordan`'s dead half was never finished.
+`se232`'s dead half was finished, published, run, and switched off.
+
+That is a far more useful thing to tell a client than either account alone could support.
+
+### Corrections to earlier sections
+
+- **§11 "the account is barely coupled"** — false as a general claim. 9 trigger edges in `jordan`
+  against **621** in `se232`, 0.05 per campaign against 1.56. A working account is densely wired, and
+  campaigns cannot be assumed independently migratable.
+- **§11's 365 empty sequences** undercounts: a sequence whose only step is the `start` vertex does
+  nothing and was not counted. The real figures are **393** for `jordan` and 306 for `se232`.
+- **§12's entity counts** were missing every array-valued foreign key. 361 `se232` purchase goals
+  carry `<Array as="purchaseId">` and not one carries the scalar the code read, hiding 388 products
+  and 697 entry-point edges. Both shapes are now lifted.
+- **§14's readiness figures** describe `jordan` only. 21% of its sequences are marked ready against
+  94% of `se232`'s.
+- **§15's style vocabulary** was incomplete: `se232` adds `unlayerLandingPage`, `smartForm`,
+  `httpRequest`, `automatedSms` and `emailOpened`.
+
+### Style is a label, not a tool
+
+The largest conceptual correction, and it came from the operator rather than the data.
+
+Many `style` values are **preset labels from an older palette**, describing why someone added a goal
+rather than what it does. `eventRequest` carries a `landingPageId` 16 times — a landing-page goal
+somebody labelled "Register for an event". `makeCall` carries a `stageId` 9 times — an opportunity
+stage move. `indicateInterest` is the legacy alias of `stageMove`.
+
+An earlier draft of this document claimed 17 goal types "can no longer be created" and 228 instances
+were unmigratable. **That was wrong.** Where configured, they use mechanisms still in the toolbar; 68
+resolve to current tools and the remaining 160 carry no reference at all, so there is nothing to
+migrate.
+
+The renderer now derives the tool from **what a node references**, falling back to style only where
+the style genuinely is a tool. That is smaller than a table of every historical palette entry, more
+accurate, and cannot go stale when Keap retires a label.
+
+Generations Keap itself marks are **kept apart** — the toolbar shows "Email message" with a NEW badge
+beside "Email (Legacy)", and `Send HTTP Post` beside `Send HTTP Request (NEW)`. For a migration that
+distinction is the work.
+
+### Still open after two accounts
+
+- **URLs are not modelled.** 294 nodes carry 442 `urlIds`; `websiteTrigger` — 307 goals in `se232` —
+  is configured by URL, so those goals show no indication of which page triggers them.
+- **20% of `se232`'s sequences cannot be walked** (357 of 1,763) against 7.6% for `jordan`. Handled
+  safely with document order and a flag; the cause is likely the branching implied by 464 decisions.
+- **App URL shapes** remain unsettled — `se232` is the same subdomain form as `jordan`. An
+  `app_id=` style account is still needed.
+- **Quote status** is a real Keap goal type neither account uses; it is new and not yet widespread.
+- `smartForm` is assumed to be another form-builder generation on one instance of evidence.
