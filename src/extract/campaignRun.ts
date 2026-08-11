@@ -75,7 +75,11 @@ export async function extractOne(
     join(outDir, 'meta.json'),
     JSON.stringify(
       {
-        appName: identity.appName ?? app,
+        // The account this artifact belongs to, which for an imported campaign
+        // is NOT the appName baked into draftXml — that names where it was
+        // published from, and is recorded separately.
+        appName: check.importedFrom === undefined ? (identity.appName ?? app) : app,
+        ...(check.importedFrom === undefined ? {} : { importedFrom: check.importedFrom }),
         ...meta,
         publishXmlLength: publishXml.length,
         neverPublished: publishXml.length === 0,

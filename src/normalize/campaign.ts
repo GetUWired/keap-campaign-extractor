@@ -1,6 +1,13 @@
+import type { ImportProvenance } from '../app.js';
 import { parseIdentity } from '../parse/cells.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
-import { type NormalizedNode, type ParsedGraph, type RawEdge, parseNodes } from './nodes.js';
+import {
+  type NormalizedNode,
+  type ParsedGraph,
+  type RawEdge,
+  isUnconfigured,
+  parseNodes,
+} from './nodes.js';
 
 /**
  * Every style observed across the 170-campaign corpus.
@@ -26,6 +33,9 @@ const KNOWN_STYLES = new Set([
 ]);
 
 const NOTE_STYLES = new Set(['notes', 'note']);
+
+/** Containers and connectors: nothing about them is the operator's to fill in. */
+const STRUCTURAL_STYLES = new Set(['flow', 'edge', 'start', '(none)']);
 
 export interface StepOrder {
   ordered: NormalizedNode[];
@@ -61,6 +71,14 @@ export interface NormalizedCampaign {
   notes: NormalizedNode[];
   edges: RawEdge[];
   orphans: string[];
+  /** Cell ids nobody ever filled in — the incompleteness Keap refuses to publish. */
+  unconfigured: string[];
+  /**
+   * Set when this campaign was published into the account from another Keap app.
+   * Its draftXml keeps the originating app and id forever, so `appName` here
+   * names where it came from rather than where it lives.
+   */
+  importedFrom?: ImportProvenance;
   styleCounts: Record<string, number>;
   warnings: string[];
 }
@@ -120,19 +138,32 @@ export function orderSteps(steps: NormalizedNode[], edges: RawEdge[]): StepOrder
 }
 
 /**
- * `funnelName` is passed in rather than parsed: the campaign's display name is
- * not in draftXml at all. It comes from the #editor data attribute, which the
- * extractor already stored in meta.json.
+ * `funnelName` and `funnelId` are passed in rather than parsed.
+ *
+ * The display name is not in draftXml at all — it comes from the #editor data
+ * attribute, which the extractor stored in meta.json. `funnelId` is in the XML
+ * but only on a cell that also carries `appName`, and 50 of the 170 campaigns
+ * in the corpus have no such cell. The directory an artifact was filed under is
+ * authoritative: extraction fetched by that id, and in all 120 cases where the
+ * XML does carry one, the two agree.
  */
 export function normalizeCampaign(
   draftXml: string,
   publishXml: string,
   criteriaByCellId: Record<string, DecisionCriteria>,
   funnelName: string | null = null,
+  funnelId: string | null = null,
 ): NormalizedCampaign {
   const graph: ParsedGraph = parseNodes(draftXml);
   const identity = parseIdentity(draftXml);
   const warnings = [...graph.warnings];
+
+  if (funnelId !== null && identity.funnelId !== null && funnelId !== identity.funnelId) {
+    warnings.push(
+      `funnelId mismatch: caller says ${funnelId}, draftXml says ${identity.funnelId} — ` +
+        `using ${funnelId}`,
+    );
+  }
 
   for (const style of Object.keys(graph.styleCounts)) {
     if (!KNOWN_STYLES.has(style)) {
@@ -192,7 +223,7 @@ export function normalizeCampaign(
     .map((n) => n.cellId);
 
   return {
-    funnelId: identity.funnelId,
+    funnelId: funnelId ?? identity.funnelId,
     appName: identity.appName,
     name: funnelName,
     published: publishXml.length > 0,
@@ -203,6 +234,11 @@ export function normalizeCampaign(
     notes,
     edges: graph.edges,
     orphans,
+    // Structural containers are excluded: a flow or an edge has nothing to
+    // configure, so calling them unconfigured would be noise.
+    unconfigured: graph.nodes
+      .filter((n) => !STRUCTURAL_STYLES.has(n.style) && isUnconfigured(n))
+      .map((n) => n.cellId),
     styleCounts: graph.styleCounts,
     warnings,
   };

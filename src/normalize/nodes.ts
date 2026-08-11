@@ -30,12 +30,37 @@ export const FK_ATTRIBUTES = [
   'marketingFaxId',
   'createOrderConfigId',
   'roundRobinId',
+  // Newer builders, found in se232. Lifting them is what makes the reference
+  // rule in render/labels.ts able to fire at all: an attribute that is never
+  // lifted can never be matched, and these were silently dead.
+  'unlayerLandingPageId',
+  'smartFormInstanceId',
+  'marketingAutomatedSmsId',
+  'automationMessageId',
+  'httpRequestConfigId',
 ] as const;
 
 export interface NodeReferences {
   tagIds: string[];
   tagCategoryIds: string[];
   [key: string]: string | string[] | undefined;
+}
+
+/**
+ * A reference as a list, whichever shape it was stored in.
+ *
+ * The same foreign key arrives as a scalar attribute in one account and as an
+ * `<Array as="…">` in another — 361 purchase goals in se232 carry
+ * `<Array as="purchaseId">` and not one carries the scalar. Storing each
+ * faithfully keeps the artifact honest; reading through here means no consumer
+ * has to know which shape it got, and none can silently skip the array form the
+ * way `typeof value === 'string'` checks did.
+ */
+export function referenceValues(references: NodeReferences, attribute: string): string[] {
+  const value = references[attribute];
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value;
+  return [];
 }
 
 export interface NormalizedNode {
@@ -50,6 +75,57 @@ export interface NormalizedNode {
   lists: Record<string, string[]>;
   objectLists: Record<string, Record<string, string>[]>;
   references: NodeReferences;
+}
+
+/**
+ * Config keys that are status or metadata rather than type-specific settings.
+ *
+ * Everything else on a node is what the operator was supposed to fill in.
+ */
+const STATUS_KEYS = new Set([
+  'initialized',
+  'ready',
+  'published',
+  'broken',
+  'deepCopy',
+  'global',
+  'name',
+  'flowType',
+  'achievementType',
+]);
+
+/**
+ * True when nobody ever filled this node in.
+ *
+ * Keap refuses to publish a campaign containing one — observed live on campaign
+ * 987, where publication required deleting a `task` step whose every field was
+ * empty (`test/fixtures/campaign-987-lifecycle/`). So this is the same
+ * incompleteness Keap's own validator rejects, and it is why so many campaigns
+ * were never published.
+ *
+ * Empty and "0" both count as unset: the deleted step carried
+ * `taskType="" taskAssignToOwner="0"`, so testing for empty strings alone would
+ * have called it configured. Arrays and objectLists are checked too — a
+ * decision keeps its branches in `objectLists`, not `config`, and reading
+ * config alone would condemn every decision in the account.
+ *
+ * Validated against two independently established counts: it flags exactly the
+ * 11 branchless decisions from section 11, and exactly the 58 tag steps that
+ * carry neither `isApply` nor any tag.
+ */
+export function isUnconfigured(node: NormalizedNode): boolean {
+  for (const [key, value] of Object.entries(node.config)) {
+    if (STATUS_KEYS.has(key)) continue;
+    if (value !== '' && value !== '0') return false;
+  }
+  if (node.references.tagIds.length > 0) return false;
+  for (const [key, value] of Object.entries(node.references)) {
+    if (key === 'tagIds' || key === 'tagCategoryIds') continue;
+    if (typeof value === 'string') return false;
+  }
+  if (Object.values(node.lists).some((entries) => entries.length > 0)) return false;
+  if (Object.values(node.objectLists).some((entries) => entries.length > 0)) return false;
+  return true;
 }
 
 export interface RawEdge {
@@ -174,6 +250,16 @@ export function parseNodes(draftXml: string): ParsedGraph {
       tagCategoryIds: lists.tagCategoryIds ?? [],
     };
     for (const key of FK_ATTRIBUTES) {
+      // A foreign key can arrive either as an attribute or as an <Array as="…">.
+      // Both forms occur for the same key across accounts, so both are lifted;
+      // referenceValues() lets consumers read them uniformly.
+      const list = lists[key];
+      if (list !== undefined && list.length > 0) {
+        const values = list.map((v) => stripLongSuffix(v)).filter((v): v is string => v !== null);
+        if (values.length > 0) references[key] = values;
+        continue;
+      }
+
       const raw = config[key];
       if (raw === undefined) continue;
       const stripped = stripLongSuffix(raw);

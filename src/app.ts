@@ -11,10 +11,18 @@ const APP_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 /** Keap funnel ids are integers. Same traversal risk through the same mechanism. */
 const FUNNEL_ID_PATTERN = /^\d+$/;
 
+/** Where a campaign came from, when it was imported rather than built here. */
+export interface ImportProvenance {
+  appName: string;
+  funnelId: string;
+}
+
 export interface IdentityCheck {
   ok: boolean;
   errors: string[];
   warnings: string[];
+  /** Present only when draftXml shows this campaign was published from another app. */
+  importedFrom?: ImportProvenance;
 }
 
 export function normalizeAppName(raw: string): string {
@@ -65,6 +73,17 @@ export function campaignDirFor(app: string, funnelId: string): string {
  * A marker that is absent is merely weaker evidence: both were present on every
  * campaign observed, but a schema change that drops one must not halt
  * extraction across an entire account.
+ *
+ * ONE exception: a campaign imported through Keap's campaign-publishing feature
+ * keeps the originating app and its original funnelId in draftXml forever, while
+ * the importing account assigns its own id. So BOTH markers differ. That is not
+ * the danger this check exists for.
+ *
+ * The danger is a session for one account pointed at another account's host: you
+ * ask for funnel 12789 and get funnel 12789 from the wrong app, so the ids agree
+ * and only the app differs. Requiring the funnelId to ALSO differ before
+ * accepting a foreign appName keeps that case failing while letting genuine
+ * imports through — 9 of se232's 398 campaigns are imported templates.
  */
 export function verifyIdentity(
   expected: { app: string; funnelId: string },
@@ -73,15 +92,33 @@ export function verifyIdentity(
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  const appDiffers =
+    actual.appName !== null && actual.appName.toLowerCase() !== expected.app.toLowerCase();
+  const funnelDiffers = actual.funnelId !== null && actual.funnelId !== expected.funnelId;
+  const imported = appDiffers && funnelDiffers;
+
+  if (imported) {
+    warnings.push(
+      `imported from "${actual.appName}" campaign ${actual.funnelId} — ` +
+        `both markers differ, which is campaign publishing rather than a wrong-host run`,
+    );
+    return {
+      ok: true,
+      errors,
+      warnings,
+      importedFrom: { appName: actual.appName as string, funnelId: actual.funnelId as string },
+    };
+  }
+
   if (actual.appName === null) {
     warnings.push('draftXml carries no appName marker — cannot confirm which app this came from');
-  } else if (actual.appName.toLowerCase() !== expected.app.toLowerCase()) {
+  } else if (appDiffers) {
     errors.push(`app mismatch: asked for "${expected.app}" but draftXml says "${actual.appName}"`);
   }
 
   if (actual.funnelId === null) {
     warnings.push('draftXml carries no funnelId marker');
-  } else if (actual.funnelId !== expected.funnelId) {
+  } else if (funnelDiffers) {
     errors.push(
       `funnel mismatch: asked for "${expected.funnelId}" but draftXml says "${actual.funnelId}"`,
     );

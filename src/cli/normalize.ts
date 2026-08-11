@@ -2,7 +2,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName, normalizeFunnelId } from '../app.js';
-import { normalizeCampaign } from '../normalize/campaign.js';
+import type { EntityCatalog } from '../api/catalog.js';
+import { type NormalizedCampaign, normalizeCampaign } from '../normalize/campaign.js';
+import { buildGraph } from '../normalize/graph.js';
 import type { DecisionCriteria } from '../parse/decisionHtml.js';
 
 interface Args {
@@ -71,6 +73,9 @@ async function main(): Promise<void> {
 
   const ids = args.funnelId !== null ? [args.funnelId] : (await readdir(campaignsDir)).sort();
   const allWarnings: string[] = [];
+  const normalized: NormalizedCampaign[] = [];
+  let unconfiguredNodes = 0;
+  let campaignsWithUnconfigured = 0;
   const unverifiedSequences: string[] = [];
   let written = 0;
   let skipped = 0;
@@ -92,21 +97,35 @@ async function main(): Promise<void> {
       // The display name is not in draftXml — it comes from the #editor data
       // attribute, which the extractor stored in meta.json.
       let funnelName: string | null = null;
+      let importedFrom: { appName: string; funnelId: string } | undefined;
       const metaPath = join(dir, 'meta.json');
       if (existsSync(metaPath)) {
         try {
           const meta = JSON.parse(await readFile(metaPath, 'utf8')) as {
             funnelName?: string | null;
+            importedFrom?: { appName: string; funnelId: string };
           };
           funnelName = meta.funnelName ?? null;
+          importedFrom = meta.importedFrom;
         } catch {
           allWarnings.push(`${funnelId}: meta.json unreadable; name left null`);
         }
       }
 
-      const campaign = normalizeCampaign(draftXml, publishXml, await loadCriteria(dir), funnelName);
+      const campaign = normalizeCampaign(
+        draftXml,
+        publishXml,
+        await loadCriteria(dir),
+        funnelName,
+        funnelId,
+      );
+      // Provenance lives in meta.json, which normalizeCampaign never reads.
+      if (importedFrom !== undefined) campaign.importedFrom = importedFrom;
       await writeFile(join(outDir, `${funnelId}.json`), JSON.stringify(campaign, null, 2), 'utf8');
       written++;
+      normalized.push(campaign);
+      unconfiguredNodes += campaign.unconfigured.length;
+      if (campaign.unconfigured.length > 0) campaignsWithUnconfigured++;
 
       for (const warning of campaign.warnings) allWarnings.push(`${funnelId}: ${warning}`);
       for (const sequence of campaign.sequences) {
@@ -136,6 +155,10 @@ async function main(): Promise<void> {
       `${unknownStyles.size > 0 ? ` — ${[...unknownStyles].join(', ')}` : ''}`,
   );
   console.log(`  sequences whose order could not be walked: ${unverifiedSequences.length}`);
+  console.log(
+    `  unconfigured nodes: ${unconfiguredNodes}` +
+      ` across ${campaignsWithUnconfigured} campaign(s) — Keap will not publish these`,
+  );
   if (unverifiedSequences.length > 0) {
     console.log(
       `    ${unverifiedSequences.slice(0, 10).join(', ')}` +
@@ -143,6 +166,54 @@ async function main(): Promise<void> {
     );
   }
   console.log(`  output: ${outDir}\n`);
+
+  // --funnel normalises one campaign for iteration; a one-campaign graph would
+  // overwrite the account's graph.json with a near-empty one.
+  if (args.funnelId !== null) {
+    console.log('  (graph skipped — --funnel normalises a single campaign)\n');
+    return;
+  }
+
+  // Enrichment is additive: a missing or unreadable catalog costs names, not
+  // the graph. It must never be required in order to normalise.
+  let catalog: EntityCatalog | undefined;
+  const catalogPath = join('artifacts', args.app, 'entities.json');
+  if (existsSync(catalogPath)) {
+    try {
+      catalog = JSON.parse(await readFile(catalogPath, 'utf8')) as EntityCatalog;
+      console.log(
+        `  using catalog: ${catalog.entities.length} entities fetched ${catalog.fetchedAt}`,
+      );
+    } catch {
+      console.log(`  warning: ${catalogPath} is unreadable — building the graph unenriched`);
+    }
+  } else {
+    console.log(`  no catalog at ${catalogPath} — building the graph unenriched`);
+  }
+
+  const graph = buildGraph(normalized, catalog);
+  const graphPath = join('artifacts', args.app, 'graph.json');
+  await writeFile(graphPath, JSON.stringify(graph, null, 2), 'utf8');
+
+  const count = (values: string[]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const value of values) out[value] = (out[value] ?? 0) + 1;
+    return out;
+  };
+
+  console.log(`[${args.app}] graph: ${graph.entities.length} entities, ${graph.edges.length} edges`);
+  console.log(`  entities: ${JSON.stringify(count(graph.entities.map((e) => e.kind)))}`);
+  console.log(`  edges:    ${JSON.stringify(count(graph.edges.map((e) => e.kind)))}`);
+  console.log(`  unreachable campaigns:   ${graph.findings.unreachableCampaigns.length}`);
+  console.log(`  tags applied by nobody:  ${graph.findings.tagsAppliedByNobody.length}`);
+  console.log(`  tags nobody listens for: ${graph.findings.tagsNobodyListensFor.length}`);
+  console.log(`  shared emails:           ${graph.findings.sharedEmails.length}`);
+  console.log(`  duplicate tag appliers:  ${graph.findings.duplicateTagAppliers.length}`);
+  console.log(`  broken references:       ${graph.findings.entitiesNotFound.length}`);
+  console.log(`  never-built references:  ${graph.findings.entitiesNeverBuilt.length}`);
+  console.log(`  unused account entities: ${graph.findings.unusedEntities.length}`);
+  for (const warning of graph.warnings) console.log(`  warning: ${warning}`);
+  console.log(`  output: ${graphPath}\n`);
 }
 
 await main();

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseNodes } from '../src/normalize/nodes.js';
+import { parseNodes, referenceValues } from '../src/normalize/nodes.js';
 
 const c584 = readFileSync(new URL('./fixtures/campaign-584-draft.xml', import.meta.url), 'utf8');
 const c987 = readFileSync(new URL('./fixtures/campaign-987-draft.xml', import.meta.url), 'utf8');
@@ -82,5 +82,51 @@ describe('parseNodes', () => {
 
   it('throws a clear error when the document has no root', () => {
     expect(() => parseNodes('<nope/>')).toThrow(/mxGraphModel/);
+  });
+});
+
+describe('foreign keys arriving as arrays', () => {
+  // A real se232 campaign. 361 purchase goals in that account carry
+  // <Array as="purchaseId"> and NOT the scalar attribute, so reading attributes
+  // alone missed 390 product references across the account.
+  const arrayRefs = readFileSync(
+    new URL('./fixtures/campaign-12075-array-refs-draft.xml', import.meta.url),
+    'utf8',
+  );
+
+  it('lifts an array-valued foreign key into references', () => {
+    const goal = parseNodes(arrayRefs).nodes.find((n) => n.lists.purchaseId !== undefined);
+    expect(goal).toBeDefined();
+    expect(goal?.references.purchaseId).toEqual(goal?.lists.purchaseId);
+    expect(referenceValues(goal!.references, 'purchaseId').length).toBeGreaterThan(1);
+  });
+
+  it('strips the Java-Long suffix from array values, as it does for scalars', () => {
+    const goal = parseNodes(arrayRefs).nodes.find((n) => n.lists.purchaseId !== undefined);
+    for (const value of referenceValues(goal!.references, 'purchaseId')) {
+      expect(value).toMatch(/^\d+$/);
+    }
+  });
+
+  it('still lifts the scalar form, which is what jordan uses', () => {
+    const step = parseNodes(c584).nodes.find(
+      (n) => typeof n.references.marketingEmailId === 'string',
+    );
+    expect(step).toBeDefined();
+  });
+
+  it('never lifts an array that is not a known foreign key', () => {
+    const node = parseNodes(arrayRefs).nodes.find((n) => n.lists.tagIds !== undefined);
+    expect(node?.references.runOnDaysOfWeek).toBeUndefined();
+  });
+});
+
+describe('referenceValues', () => {
+  it('reads either shape as a list, so consumers need not care', () => {
+    expect(referenceValues({ tagIds: [], tagCategoryIds: [], purchaseId: '7' }, 'purchaseId')).toEqual(['7']);
+    expect(
+      referenceValues({ tagIds: [], tagCategoryIds: [], purchaseId: ['1', '2'] }, 'purchaseId'),
+    ).toEqual(['1', '2']);
+    expect(referenceValues({ tagIds: [], tagCategoryIds: [] }, 'purchaseId')).toEqual([]);
   });
 });

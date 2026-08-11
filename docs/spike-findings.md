@@ -485,9 +485,10 @@ survey exactly. Two independent code paths, the same answer.
 
 ### Gaps this surfaced
 
-- **11 of 85 decisions have routing but no criteria.** Their `decisions/<cellId>.json` is absent, so
-  branches carry `rules: null`. Worth chasing before the relationship graph, since a decision that
-  tests a tag is an edge the graph would otherwise miss.
+- **11 of 85 decisions have no branches at all** — corrected 2026-08-06 while building the graph.
+  The earlier reading of "routing but no criteria" was wrong: every decision that has branches also
+  has criteria on disk (74 of 74). The 11 are unconfigured diamonds with an empty
+  `<Array as="decisions">`, so there is no routing to chase and nothing missing from the extraction.
 - **53 orphans** across the account — top-level nodes no edge touches. The handoff calls orphan
   detection free, and this is the first count of it.
 - **198 notes.** The handoff calls these the highest-signal text in the corpus, and there is
@@ -507,3 +508,553 @@ The app build changed mid-session, from `1.70.0.989251-sysarch-202608031100` to
 `1.70.0.990820-hf-202608041714` — Keap shipped a hotfix while this work was in progress. Nothing
 broke, but it is a reminder that every endpoint here is undocumented and can move without notice.
 `meta.json` records `appBuild` per campaign, so a future format change is at least attributable.
+
+## 12. The account relationship graph
+
+Added 2026-08-06. `artifacts/jordan/graph.json` — 762 entities, 780 edges, built offline from the
+normalised corpus in seconds.
+
+| Entities | | Edges | |
+|---|---|---|---|
+| campaign | 170 | `sends` | 250 |
+| tag | 142 | `entry-point` | 207 |
+| email | 250 | `applies` | 146 |
+| webform | 113 | `removes` | 99 |
+| landingPage | 60 | `tests` | 43 |
+| form | 16 | `listens-for` | 26 |
+| product | 11 | `triggers` (derived) | 9 |
+| | | `references-campaign` | 0 |
+
+The 142 tags are the 131 counted from `<Array as="tagIds">` plus **11 that appear only in decision
+criteria** — the excess over the floor is fully attributable, as the design predicted.
+
+### 50 campaigns had no id of their own
+
+`parseIdentity` reads `funnelId` off the first cell carrying an `appName` attribute, and **50 of the
+170 campaigns have no such cell** — so 29% of the normalised corpus carried `funnelId: null`. The
+graph would have collapsed all fifty into a single `campaign:null` node and produced a confidently
+wrong picture of the account.
+
+The artifact's own directory name is authoritative: extraction fetched by that id and filed the
+result under it. Where the XML does carry one, the two agree in all 120 cases. `normalizeCampaign`
+now takes it from the caller, exactly as it already did for the display name, and warns on
+disagreement.
+
+**This was invisible until something tried to use the id as a key.** Nothing in the normaliser's own
+output looked wrong.
+
+### The account is far more loosely coupled than expected
+
+**Only 9 `triggers` edges across 170 campaigns, and 5 of those are self-loops.** Four cross-campaign
+handoffs exist in the entire account:
+
+```
+campaign 16  → 467            via tag 346
+campaign 672 → 670, 674, 676  via tag 646
+```
+
+The tag counts say the same thing from the other side: **92 of the 142 tags are applied by a campaign
+nothing listens for**, and 44 are applied by nobody at all. Tags here are overwhelmingly
+record-keeping rather than wiring between campaigns.
+
+**Emails are never shared.** 250 distinct `marketingEmailId` values across 250 references — every
+email belongs to exactly one campaign. Only 13 tags are applied by more than one campaign.
+
+The practical consequence for a migration is good news: campaigns are mostly independent units, so
+they can be moved one at a time rather than in coupled clusters.
+
+### 10 campaigns cannot be entered
+
+Four have no goals at all — 199, 331, 411, 656. Six have goals, but every one is a `tagApplied` goal
+listening for a tag no *other* campaign applies: 557, 588, 672, 745, 809, 949. A campaign applying a
+tag it listens for does not rescue itself; the loop still needs an outside first push.
+
+Campaign 672 is the interesting one: it is unreachable, and it is also the account's largest trigger
+source, feeding 670, 674 and 676. A dead campaign holding three live ones open.
+
+Combined with the 91 never-published campaigns and 365 empty sequences already on record, this is
+the third independent signal pointing at the same conclusion about how much of this account is inert.
+
+### What the graph deliberately does not model
+
+- **14 of the 20 lifted foreign keys have no entity kind** — led by `marketingNoteId` (94
+  references), `fileBoxId` (43) and `stageId` (37). They stay in the normalised files, so widening
+  the entity vocabulary later costs a re-run and nothing else.
+- **24 `tagIds` references state no direction.** They sit on goal styles — `eventAttend` (6), `goal`
+  (6), `newsletterRequest` (4), `purchaseSuccess` (3), `indicateInterest` (2), `requestInfo` (2),
+  `eventRequest` (1) — that carry a tag without saying whether they apply it, require it, or
+  something else. The tags are registered as entities; no edge is invented. Settling this needs a
+  look at the live UI for one of each style.
+- **Only 6 of 142 tags have a display name.** Decision criteria are the sole source of names in the
+  extracted data, so everything else is a bare id until stage 3 resolves them through the REST API.
+  A graph of numbered tags is analysable but not yet readable.
+
+### Verification
+
+Every figure above was predicted from the corpus before the code was written, and the implementation
+reproduced all of them exactly — entity counts, edge counts per kind, and all five findings. Two
+independent derivations agreeing. The run is also byte-deterministic: a second `npm run normalize`
+produces an identical `graph.json`.
+
+## 13. REST API enrichment
+
+Added 2026-08-06. `artifacts/jordan/entities.json` — 528 entities in 9.7s, joined onto the graph at
+normalise time. Auth is a Service Account Key in `X-Keap-API-Key`; the key is never written to disk,
+logged, or included in an error message.
+
+| Kind | Endpoint | Fetched | Referenced | Labelled |
+|---|---|---|---|---|
+| tag | `/crm/rest/v2/tags` | 131 | 142 | **40** |
+| webform | `/crm/rest/v2/webforms` | 202 | 113 | **63** |
+| email | `/crm/rest/v2/emails/templates` | 136 | 250 | **0** |
+| form | `/crm/rest/v1/forms` | 7 | 16 | **0** |
+| product | `/crm/rest/v2/products` | 36 | 11 | **7** |
+| user | `/crm/rest/v2/users` | 16 | 4 | **3** |
+| landingPage | none exists | — | 60 | **0** |
+
+**113 of 596 non-campaign entities now carry a name**, against the 586 this stage set out to fix.
+That is a modest result, and the reasons are worth more than the number.
+
+### The first run pulled 14,914 sent emails
+
+`/crm/rest/v2/emails` is **sent-email history** — the record of what went to which contact — not the
+campaign email templates that `marketingEmailId` points at. Probed blind, it answered, and the
+catalogue filled with 14,914 records against 250 referenced.
+
+It looked like it worked. 104 of the 250 referenced ids existed in that set, so 40% of campaign email
+steps would have been labelled — every one of them wrong. The tell was that the API returned the
+**same** name for every distinct id sampled, and all 72 email steps carrying a real name disagreed
+with the record sitting at their id. The "matches" were coincidental collisions in a range spanning
+1–30740.
+
+**Campaign email content lives one level down, at `/crm/rest/v2/emails/templates`.** The parent is
+now permanently off the allowlist, anchored so that permitting the child cannot reopen it. The
+catalogue that run produced was deleted.
+
+Two lessons, both already written into the code rather than only here. An endpoint answering `200`
+with plausible data is not evidence it holds what you asked for. And the check that caught it —
+comparing against names the extractor already had — cost nothing and was the only thing standing
+between this and a confidently mislabelled corpus.
+
+### Campaign emails are still unresolved
+
+The templates endpoint is the right resource and returns real, named emails. But **it shares no id
+with any `marketingEmailId`**: template ids run 150–2058 and are mostly odd, campaign email ids run
+1146–2442 and are uniformly even. Zero of 250 match.
+
+So `/emails/templates` is the account's reusable template library, and a campaign email is a
+different record. Nothing is mislabelled — zero overlap means zero false names — but **handoff §14 Q9
+remains open**: the API supplies email templates, and campaign email content is still unresolved.
+
+### `/forms` and `/webforms` are different resources
+
+`/crm/rest/v1/forms` matched 6 of 16 `internalFormId` references and **0 of 113** `webformId`. It
+serves internal forms. An earlier candidate ordering let `webform` claim it first, which would have
+named 113 webforms from 7 unrelated records — the same failure as the email endpoint, caught by the
+same kind of check before it shipped.
+
+Public webforms have their own resource, `/crm/rest/v2/webforms`, which matched 63 of 113.
+
+The 6 internal forms that do match carry **no name field at all**, so they resolve to an entity and
+label nothing. Matched is not the same as named.
+
+### "Not found" and "not looked up" are different claims
+
+The first enriched run reported **465 broken references**. 310 of those were emails and landing
+pages — kinds with no comparable source at all. Reported that way it reads as "310 campaigns point
+at deleted records", which is false; nothing was ever looked up.
+
+A kind now qualifies for broken-reference reporting only once it has proved comparable by matching
+at least one id. The honest figures:
+
+| Finding | Total | By kind |
+|---|---|---|
+| Broken references | **155** | tag 90, webform 50, form 10, product 4, user 1 |
+| Unused account entities | **273** | webform 139, tag 91, product 29, user 13, form 1 |
+
+**90 tags and 50 webforms referenced by campaigns no longer exist in the account.** Against 141
+campaigns filed under "Old Campaigns", that is consistent rather than surprising — and it is the
+fourth independent signal, after 91 never-published campaigns, 365 empty sequences and 10
+unreachable campaigns, all pointing the same way.
+
+The other direction is just as useful for a migration: **273 account entities nothing references**,
+including 139 webforms and 91 tags that exist but are wired to nothing.
+
+### The cross-check paid for itself twice
+
+Six tags carry a label from decision criteria — an entirely independent source, extracted months of
+code earlier. All six agree with the API. Five differ only in that criteria render a tag as
+`Category -> Name` where the API returns the bare name, so the comparison treats that prefix as
+agreement; otherwise five predictable conflicts would have buried any real drift.
+
+That check is what proved the tag join sound, and therefore that 40-of-142 is genuine deletion rather
+than a broken key. It is also what condemned the email join.
+
+### Rate limits — a lower bound, not an answer
+
+Handoff §14 Q10 asked about API rate limits. **Not reached.** The 528-entity run made roughly 13
+requests at the extractor's 250ms throttle with no 429; the earlier 15,103-entity run made about 21,
+including 15 pages of 1,000 records, also with no 429.
+
+That is a lower bound of "at least 4 requests/second sustained, at least 15,000 records", not a
+measured ceiling. State it as such: nothing here establishes where the limit is.
+
+### What remains unnamed
+
+- **250 campaign emails** — the template library does not key by `marketingEmailId`.
+- **60 landing pages** — no endpoint exists on either API version.
+- **16 internal forms** — 6 resolve but carry no name.
+- **102 tags and 50 webforms** — deleted from the account; correctly unnamed.
+
+## 14. Publication semantics, established by experiment
+
+Added 2026-08-06. Everything before this was inferred from static snapshots. Here a human made two
+deliberate changes in the campaign builder between extractions of campaign 987, which turns several
+guesses into observations. All three states are preserved in
+`test/fixtures/campaign-987-lifecycle/`.
+
+### `ready` is user-controlled, and independent of publication
+
+Ticking "ready" on two sequences changed exactly this, and nothing else:
+
+```diff
+- <Object name="Approved for Beta" flowType="Stop" published="0" initialized="1" as="value"/>
++ <Object name="Approved for Beta" flowType="Stop" published="0" initialized="1" ready="1" broken="0" as="value"/>
+```
+
+`published="0"` is unchanged and `publish.xml` is byte-identical across the transition. Readiness and
+publication are separate axes.
+
+**Before the change the attribute was absent entirely, not `ready="0"`.** So `ready: null` means
+"never marked" and is a distinct state from an explicit false. `boolOrNull` preserves all three,
+which is the only reason this was visible; a parser coercing absent to false would have erased it.
+
+The three states behave differently, and absent is the worst:
+
+| `ready` | share of references that resolve to a real account entity |
+|---|---|
+| `true` | 45% |
+| `false` (explicit) | 16% |
+| `null` (absent) | **7%** |
+
+### `published` at node level means "in the published snapshot"
+
+Not "finished". This is why it predicts nothing about whether a referenced entity exists — 36% of
+references resolve under `published=true` against 39% under false, which is noise.
+
+`ready` is the field carrying builder intent, and it is the one with signal.
+
+### `broken` is transient
+
+It appears when readiness is evaluated and is **removed entirely on publication** — zero occurrences
+remain in the published state. It is a pre-publish validation artifact, not durable state.
+
+That reframes the corpus survey: 910 nodes carry `broken`, and all of them are therefore unpublished.
+Any analysis treating it as a lasting property would have been reading unpublished-ness under
+another name. Caught before anything was built on it.
+
+### Keap refuses to publish a campaign containing an unconfigured step
+
+Publishing required deleting cell 43 — a `task` step with every field empty:
+
+```
+taskType="" taskTitle="" taskBody="" taskAssignToOwner="0" taskDaysTillDue="0"
+```
+
+The operator deleted it and its inbound edge rather than configure it, taking the campaign from 11
+steps to 10 and removing `task` from the style histogram. Publication also flipped `published` to
+`1` throughout and made `draft.xml` and `publish.xml` byte-identical, so `hasUnpublishedChanges`
+went `true` → `false` — **the only live validation that logic has had.**
+
+### This inverts the missing-entity story
+
+Entities referenced only by never-published campaigns exist in the account 31% of the time, against
+49% for those touched by at least one published campaign. The intuitive reading is that entities are
+missing *because* the campaign is unpublished.
+
+The mechanism is the other way round. Every published campaign has passed a validator that rejects
+unconfigured steps, so unconfigured steps survive mainly in campaigns that were never published — and
+those steps' references were never real entities to begin with. **A campaign is not missing entities
+because it is unpublished; it is unpublished because it still contains steps nobody finished.**
+
+Consequence for the graph, now acted on: the 155 "broken references" were two different things, and
+splitting them by whether a *ready* step is what points at the missing entity gives
+
+| | |
+|---|---|
+| **87** referenced by a step someone marked ready | genuine breakage, worth chasing |
+| **68** referenced only by steps nobody marked ready | abandoned drafting, not breakage |
+
+Nearly half the apparent breakage was never breakage.
+
+### Unconfigured steps, detected structurally
+
+`isUnconfigured` in `nodes.ts` flags a node with no type-specific setting, no reference, and no
+non-empty array — the same incompleteness Keap's validator rejects. Empty and `"0"` both count as
+unset, because the deleted step carried `taskType=""` *and* `taskAssignToOwner="0"`; testing for
+empty strings alone would have called it configured. Arrays and `objectLists` are checked too, since
+a decision keeps its branches there rather than in `config`.
+
+The rule was validated against three independent facts rather than by inspection:
+
+- it flags cell 43, the step Keap refused to publish, in the preserved fixture;
+- it flags **exactly the 11 branchless decisions** from section 11;
+- it flags **exactly the 58 tag steps** carrying neither `isApply` nor any tag.
+
+Across the account: **720 unconfigured nodes in 116 of 170 campaigns.** None of those campaigns can
+be published as they stand.
+
+### Readiness is the sharpest live-versus-dead signal yet
+
+| Sequences | |
+|---|---|
+| Marked ready | 158 of 767 |
+| Explicitly not ready | 135 |
+| Never marked | 474 |
+
+**102 of 170 campaigns have no ready sequence at all** — more than the 91 never published, and a
+better-grounded measure, because it records whether a human considered the work finished rather than
+whether it reached production.
+
+The 135 explicit `ready="0"` sequences are worth a second look: since absence is the untouched state,
+an explicit false plausibly means marked-then-unmarked. That mechanism is unconfirmed.
+
+### Two operational notes
+
+**Re-extraction destroys history.** `npm run spike` overwrites
+`artifacts/<app>/campaigns/<id>/` in place. Cell 43 now exists nowhere in Keap and nowhere in the
+artifacts — it survives only because it was copied into `test/fixtures/` by hand. `meta.json` stores
+`draftXmlSha256`, so a re-extraction can tell you something changed and never what. Three
+experiments produced three irreversible states today and only the last is in `artifacts/`.
+
+**The session expired a second time**, mid-experiment, consistent with the ~30-minute window in §8.
+It failed cleanly with nothing written and nothing clobbered. Irrelevant to a bulk run at 6.5 minutes
+per account; awkward for interactive work like this.
+
+## 15. Rendering
+
+Added 2026-08-06. `artifacts/jordan/rendered/` — 170 Markdown pages plus an index, generated offline
+in seconds from `normalized/`, `graph.json` and `entities.json`.
+
+Each page carries a Mermaid diagram of the campaign level, every goal and step in English, and what
+the campaign connects to in both directions. Rendering adds no information. Its entire value is
+making existing information impossible to miss — and on the first real run it did that four times.
+
+### Entities were never decoded anywhere
+
+`cleanName` strips `~br~` and collapses whitespace, but nothing in the pipeline ever decoded HTML
+entities. **76 labels and 95 note bodies carried `&#39;` and `&quot;` straight through extraction,
+normalisation and the graph** — including timer descriptions reading "the contact&#39;s next
+Birthday".
+
+Nothing had ever displayed that text, so nothing had noticed. Rendering is what made a long-standing
+data defect visible, and it is fixed at the render layer rather than in `cleanName`, so the
+normalised artifacts stay byte-identical to what was extracted.
+
+**Catalog names needed it too, and that was the sharper miss.** Names from the REST API never pass
+through `cleanName` at all, so one webform arrived as
+`"Request our\nEmail Series\n&quot;How to generate\nleads online&quot;"` and put four broken lines
+into a page. The fix cleans every name at the point it enters the renderer.
+
+### Timers needed no arithmetic after all
+
+Keap writes the human-readable description into `name`:
+
+```
+"Wait at least 3 days and then run on a weekday at 8:00 AM"
+```
+
+So timers render verbatim and **handoff §14 Q2's timezone discrepancy does not block display** —
+showing Keap's own string shows exactly what the builder shows. Q2 stays open for anything that needs
+to *reason* about timing. This removed the fiddliest part of the planned work entirely.
+
+### One style, several meanings
+
+`newsletterRequest` is a web form submission 106 times, a landing page 20 times, an internal form 7
+times, and unconfigured 69 times. The flat style→label table originally specced could not have
+expressed that; labels are derived from style **and** references instead.
+
+Keap has also shipped several builders over the years — `email`, `bardEmail` and `unlayerEmail` are
+one thing to a reader, as are `landingPage` and `convrrtLandingPage`. Internal style names never
+appear in output.
+
+**Still unsettled:** `stageMove`, `makeCall`, `indicateInterest` and `fileDownload` all carry an
+optional `stageId` that most instances leave unset — 7 of 82 for `indicateInterest`, 2 of 13 for
+`fileDownload`. They may be one goal type in the current UI or four. They keep distinct labels until
+someone who knows the builder says otherwise; calling them all "stage move" would misdescribe the
+majority that move no stage.
+
+### 28 sequences do nothing but were not counted as empty
+
+A sequence whose only step is the `start` vertex has one step and does nothing. Section 11 counted
+only `steps.length === 0`, so the account's dead-sequence figure was **365 when the true number is
+393**.
+
+Both of campaign 987's terminal branches are like this — and they are the two sequences a human
+marked ready and published on the same afternoon.
+
+### What the diagrams surfaced that the counts had not
+
+**Campaign 987 routes contacts into two dead ends.** "Approved for Beta" and "Declined for Beta"
+contain nothing. As two rows inside a count of 365 nobody noticed; as two boxes labelled `(empty)` it
+is the first thing you see.
+
+**Worse, its two goals are the same trigger.** "Approved" and "Declined" both wait on tag 1019,
+`0 - 50 New Contacts` — a tag with nothing to do with beta approval. Approving and declining an
+applicant do the same thing. That was in the normalised data all along; it became visible only when
+the page named the tag each goal waits for rather than just the goal.
+
+Neither is a rendering defect. Both are defects in a live campaign, found by looking at it.
+
+### Pre-existing mojibake, deliberately not repaired
+
+Five names in campaign 672 contain a stray `U+00C2` — the signature of a UTF-8 non-breaking space
+decoded as Latin-1. It arrives that way from Keap.
+
+Left alone on purpose. A mojibake-repair heuristic guesses at encoding damage, and `U+00C2` is a
+legitimate character in other contexts; the risk of corrupting good text outweighs five cosmetic
+occurrences. This is the `stripLongSuffix` lesson: a narrow correct fix beats a broad clever one.
+
+### Legibility at the top end
+
+The median campaign has 14 renderable nodes; the largest has 112 and 86 steps. Diagrams cover the
+campaign level only — goals, decisions and sequences — so campaign 751 renders as 10 goals, 2
+decisions and 14 sequence boxes rather than a hairball. Steps are linear by construction and read
+better as an ordered list, which the page provides.
+
+## 16. A second account — and the correction of almost everything before it
+
+Added 2026-08-06. `se232` extracted, normalized, graphed and rendered: **398 campaigns**, the account
+the handoff was written about. `jordan` was the rehearsal.
+
+**Read §9–15 with this section beside them.** Every figure in them was n=1, and `jordan` turns out to
+be an abandoned personal account. Where the two agree we have learned something about Keap; where
+they diverge, the earlier text describes Jordan rather than the product. The divergences are large.
+
+| | jordan | se232 |
+|---|---|---|
+| campaigns | 170 | 398 |
+| never published | 90 (53%) | 63 (16%) |
+| sequences doing nothing | 393 (51%) | 306 (17%) |
+| sequences marked ready | 158 (21%) | 1,663 (94%) |
+| campaigns with no ready sequence | 102 (60%) | 19 (5%) |
+| unconfigured nodes | 720 | 92 |
+| decisions | 85 | 464 |
+| **trigger edges** | **9** | **621** |
+
+### The read-only guard stopped 95 writes to live campaigns
+
+The clearest result of the day, and it retires "precaution" as a description of the guard.
+
+| blocked, per account | jordan | se232 |
+|---|---|---|
+| `PUT /app/funnel/<id>` | 10 | **85** |
+| `POST /app/funnel/editor` | 29 | 153 |
+| `POST /app/editorLockout/unlock` | 10 | 85 |
+| `PUT /app/funnel/update_builder_preference` | 31 | 156 |
+| total writes to the tenant | 83 | **479** |
+
+The handoff warned that "writes are one click away". They are closer than that: **the campaign
+builder attempts to write to a campaign merely being looked at, on page load.** Without the
+driver-level guard this tool would have issued 85 PUTs against a live client's campaigns during a
+single read-only run.
+
+It fires on 6% of `jordan`'s campaigns and 21% of `se232`'s — not deterministic per page load, so a
+two-campaign spike would have shown nothing at all.
+
+### Opening an imported campaign destroys its provenance
+
+Nine `se232` campaigns are imports from other Keap apps (`mrz166` ×8, `it285` ×1), published in
+through campaign sharing. Their `draftXml` keeps the **originating app and original funnelId**
+forever, while the importing account assigns its own id.
+
+The identity check failed all nine, correctly by its old rule and wrongly in substance: the fetch
+had succeeded and the data was in hand. The discriminator is now
+
+- appName differs, funnelId **matches** → wrong host. Still fails. This is the §8 scenario.
+- appName differs, funnelId **differs** → import. Accepted, with `importedFrom` recorded.
+
+A wrong-host run asks for funnel X and receives funnel X; an import can never match on both.
+
+**Then a natural experiment nobody designed.** Between two runs, two of the nine were opened in the
+Keap UI. Those two — and only those two — came back re-stamped with `se232`'s own app name and id.
+Our extraction had touched all nine, twice, and changed none of them.
+
+**Opening an imported campaign in the builder rewrites its provenance. Reading it with this tool does
+not.** Seven of the nine still carry `mrz166`. That evidence is one-shot: it exists only until
+somebody clicks.
+
+### "Published" is three states, not two
+
+§10 concluded that `publishXml` is authoritative over the list page's Published Date. That was right
+about which artifact is real and wrong about which question each answers.
+
+| | jordan | se232 |
+|---|---|---|
+| currently live (both signals) | 79 | 210 |
+| **published, then stopped** | 1 | **125** |
+| never published (neither) | 90 | 63 |
+
+`publishXml` answers *has this ever been published*; the list's date answers *is it live now*. On
+`jordan` they agreed within one campaign because nothing was ever switched off. On an active account
+they diverge by **31% of the account**.
+
+This partially reopens §9, which declared "published years ago and now inert" invisible without
+activity data. A campaign that was published and then deliberately **turned off** is detectable, and
+is 125 campaigns here. Only "still live but unvisited" remains invisible.
+
+### The sharpest cross-account result
+
+**Roughly half of every account is not currently live — 53% of `jordan`, 47% of `se232`.** The
+proportion is stable; the composition is opposite. `jordan`'s dead half was never finished.
+`se232`'s dead half was finished, published, run, and switched off.
+
+That is a far more useful thing to tell a client than either account alone could support.
+
+### Corrections to earlier sections
+
+- **§11 "the account is barely coupled"** — false as a general claim. 9 trigger edges in `jordan`
+  against **621** in `se232`, 0.05 per campaign against 1.56. A working account is densely wired, and
+  campaigns cannot be assumed independently migratable.
+- **§11's 365 empty sequences** undercounts: a sequence whose only step is the `start` vertex does
+  nothing and was not counted. The real figures are **393** for `jordan` and 306 for `se232`.
+- **§12's entity counts** were missing every array-valued foreign key. 361 `se232` purchase goals
+  carry `<Array as="purchaseId">` and not one carries the scalar the code read, hiding 388 products
+  and 697 entry-point edges. Both shapes are now lifted.
+- **§14's readiness figures** describe `jordan` only. 21% of its sequences are marked ready against
+  94% of `se232`'s.
+- **§15's style vocabulary** was incomplete: `se232` adds `unlayerLandingPage`, `smartForm`,
+  `httpRequest`, `automatedSms` and `emailOpened`.
+
+### Style is a label, not a tool
+
+The largest conceptual correction, and it came from the operator rather than the data.
+
+Many `style` values are **preset labels from an older palette**, describing why someone added a goal
+rather than what it does. `eventRequest` carries a `landingPageId` 16 times — a landing-page goal
+somebody labelled "Register for an event". `makeCall` carries a `stageId` 9 times — an opportunity
+stage move. `indicateInterest` is the legacy alias of `stageMove`.
+
+An earlier draft of this document claimed 17 goal types "can no longer be created" and 228 instances
+were unmigratable. **That was wrong.** Where configured, they use mechanisms still in the toolbar; 68
+resolve to current tools and the remaining 160 carry no reference at all, so there is nothing to
+migrate.
+
+The renderer now derives the tool from **what a node references**, falling back to style only where
+the style genuinely is a tool. That is smaller than a table of every historical palette entry, more
+accurate, and cannot go stale when Keap retires a label.
+
+Generations Keap itself marks are **kept apart** — the toolbar shows "Email message" with a NEW badge
+beside "Email (Legacy)", and `Send HTTP Post` beside `Send HTTP Request (NEW)`. For a migration that
+distinction is the work.
+
+### Still open after two accounts
+
+- **URLs are not modelled.** 294 nodes carry 442 `urlIds`; `websiteTrigger` — 307 goals in `se232` —
+  is configured by URL, so those goals show no indication of which page triggers them.
+- **20% of `se232`'s sequences cannot be walked** (357 of 1,763) against 7.6% for `jordan`. Handled
+  safely with document order and a flag; the cause is likely the branching implied by 464 decisions.
+- **App URL shapes** remain unsettled — `se232` is the same subdomain form as `jordan`. An
+  `app_id=` style account is still needed.
+- **Quote status** is a real Keap goal type neither account uses; it is new and not yet widespread.
+- `smartForm` is assumed to be another form-builder generation on one instance of evidence.

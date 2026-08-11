@@ -1,0 +1,93 @@
+<mxGraphModel>
+  <root>
+    <mxCell id="0">
+      <Object initialized="1" funnelId="987L" appName="jordan" buildNumber="1.70.0.297103-hf-202011010228" as="value">
+        <Array as="convertersThatRan">
+          <add value="longIds_bardEmail"/>
+          <add value="longIds_tag"/>
+          <add value="longIds_webform"/>
+        </Array>
+      </Object>
+    </mxCell>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="2" style="newsletterRequest" parent="1" vertex="1" metaType="webform">
+      <Object name="WooConnection Beta~br~Tester Application" global="1" published="1" initialized="1" webformId="681L" ready="1" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="3" style="flow" parent="1" vertex="1" collapsed="1">
+      <Object name="Tag and Send Application~br~Confirmation" flowType="Stop" published="1" initialized="1" ready="1" as="value"/>
+      <mxGeometry x="256" y="64" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="11" style="start" parent="3" vertex="1">
+      <Object initialized="1" ready="1" published="1" name="Start" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="12" style="bardEmail" parent="3" vertex="1">
+      <Object name="Application Recvd" published="1" initialized="1" marketingEmailId="2399L" ready="1" as="value"/>
+      <mxGeometry x="192" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="13" style="edge" parent="3" source="11" target="12" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="14" style="start" parent="3" vertex="1">
+      <Object initialized="1" ready="1" published="1" name="Start" as="value"/>
+      <mxGeometry x="64" y="192" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="15" style="tag" parent="3" vertex="1">
+      <Object initialized="1" isApply="true" ready="1" published="1" as="value">
+        <Array as="tagIds">
+          <add value="1123L"/>
+        </Array>
+      </Object>
+      <mxGeometry x="192" y="192" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="16" style="edge" parent="3" source="14" target="15" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="17" style="timerDelay" parent="3" vertex="1">
+      <Object waitDelay="2" waitDelayType="Month" runOnType="Weekday" timeOfDayType="At" startHour="8" startMinute="0" startAmPm="AM" initialized="1" useContactTimeZone="0" name="Wait at least 2 months and~br~then run on a weekday at~br~8:00 AM" ready="1" published="1" as="value"/>
+      <mxGeometry x="320" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="18" style="edge" parent="3" source="12" target="17" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="32" style="flow" parent="1" vertex="1" collapsed="1">
+      <Object name="Already Applied" flowType="Stop" published="1" initialized="1" ready="1" deepCopy="0" as="value"/>
+      <mxGeometry x="256" y="192" width="128" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="24" style="start" parent="32" vertex="1">
+      <Object initialized="1" ready="1" published="1" name="Start" deepCopy="0" as="value"/>
+      <mxGeometry x="64" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="25" style="bardEmail" parent="32" vertex="1">
+      <Object name="Application ~br~Already Recvd" published="1" initialized="1" marketingEmailId="2401L" ready="1" deepCopy="0" as="value"/>
+      <mxGeometry x="192" y="64" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="26" style="edge" parent="32" source="24" target="25" edge="1">
+      <Object as="value"/>
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="27" style="start" parent="32" vertex="1">
+      <Object initialized="1" ready="1" published="1" name="Start" deepCopy="0" as="value"/>
+      <mxGeometry x="64" y="192" width="64" height="64" as="geometry"/>
+    </mxCell>
+    <mxCell id="34" style="decision" parent="1" vertex="1">
+      <Object initialized="1" ready="1" published="1" as="value">
+        <Array as="decisions">
+          <Object flowId="3" decisionId="479L"/>
+          <Object flowId="32" decisionId="481L"/>
+        </Array>
+      </Object>
+      <mxGeometry x="160" y="80" width="32" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="35" style="edge" parent="1" source="2" target="34" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="36" style="edge" parent="1" source="34" target="3" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="37" style="edge" parent="1" source="34" target="32" edge="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>
