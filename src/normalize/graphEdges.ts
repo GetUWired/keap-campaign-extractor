@@ -10,7 +10,9 @@ export type EntityKind =
   | 'landingPage'
   | 'product'
   | 'form'
-  | 'user';
+  | 'user'
+  | 'url'
+  | 'link';
 
 export type EdgeKind =
   | 'applies'
@@ -232,6 +234,12 @@ export const REFERENCE_EDGES: Record<string, { kind: EntityKind; edge: EdgeKind 
   landingPageId: { kind: 'landingPage', edge: 'entry-point' },
   purchaseId: { kind: 'product', edge: 'entry-point' },
   internalFormId: { kind: 'form', edge: 'entry-point' },
+  // A tracked page on the account's own site, and a link inside an email.
+  // Distinct kinds deliberately: they are different things, and neither can be
+  // named — no catalog endpoint serves them — but knowing WHICH page or link
+  // triggers a goal, and which campaigns share one, is the point.
+  urlIds: { kind: 'url', edge: 'entry-point' },
+  linkIds: { kind: 'link', edge: 'entry-point' },
   userId: { kind: 'user', edge: 'assigned-to' },
   sourceFunnelId: { kind: 'campaign', edge: 'references-campaign' },
 };

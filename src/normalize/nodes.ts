@@ -38,6 +38,11 @@ export const FK_ATTRIBUTES = [
   'marketingAutomatedSmsId',
   'automationMessageId',
   'httpRequestConfigId',
+  // Always arrays, never scalars. urlIds are the pages a Web Page automation
+  // goal watches — 445 values across 297 nodes, every one of them a
+  // websiteTrigger. linkIds are links inside an email.
+  'urlIds',
+  'linkIds',
 ] as const;
 
 export interface NodeReferences {

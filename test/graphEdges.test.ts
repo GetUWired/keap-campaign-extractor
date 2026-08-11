@@ -406,3 +406,54 @@ describe('user references', () => {
     expect(harvest.tallies['reference attribute "roundRobinId" has no entity kind']).toBe(1);
   });
 });
+
+describe('urls and email links', () => {
+  it('emits one entry-point edge per watched URL', () => {
+    // Every websiteTrigger goal carries the pages it watches in urlIds — 445
+    // values across 297 nodes, and none of them reached the graph before.
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '4',
+          style: 'websiteTrigger',
+          name: 'Visited Sales Page',
+          references: { tagIds: [], tagCategoryIds: [], urlIds: ['775', '777'] },
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:16').edges).toEqual([
+      { from: 'campaign:16', to: 'url:775', kind: 'entry-point', viaCellId: '4' },
+      { from: 'campaign:16', to: 'url:777', kind: 'entry-point', viaCellId: '4' },
+    ]);
+  });
+
+  it('keeps an email link distinct from a tracked page', () => {
+    // A link inside an email and a page on your own site are different things;
+    // merging them would repeat the webform/internal-form mistake.
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '9',
+          style: 'linkClick',
+          references: { tagIds: [], tagCategoryIds: [], linkIds: ['761'] },
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:16').edges).toEqual([
+      { from: 'campaign:16', to: 'link:761', kind: 'entry-point', viaCellId: '9' },
+    ]);
+  });
+
+  it('no longer tallies them as unmodelled', () => {
+    const campaign = makeCampaign({
+      goals: [
+        makeNode({
+          cellId: '4',
+          style: 'websiteTrigger',
+          references: { tagIds: [], tagCategoryIds: [], urlIds: ['775'] },
+        }),
+      ],
+    });
+    expect(referenceEdges(campaign, 'campaign:1').tallies).toEqual({});
+  });
+});
