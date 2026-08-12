@@ -87,16 +87,31 @@ export function renderCampaign(
   graph: AccountGraph,
   catalog?: EntityCatalog,
 ): string {
-  const context: ProseContext = { names: nameIndex(catalog) };
+  // Names come from the GRAPH, not the catalog alone. buildGraph already
+  // merged catalog names over decision-criteria labels, and reading only the
+  // catalog discarded every name learned from a decision — 575 tags in se232,
+  // an account with no catalog at all.
+  const names = nameIndex(catalog);
+  for (const entity of graph.entities) {
+    if (entity.label !== null && !names.has(entity.id)) names.set(entity.id, plainText(entity.label));
+  }
+  const context: ProseContext = { names };
   const title = campaign.name === null ? `Campaign ${campaign.funnelId}` : plainText(campaign.name);
   const lines: string[] = [`# ${title} (${campaign.funnelId})`, '', statusLine(campaign), ''];
 
   const findings = findingsLine(campaign);
   if (findings !== null) lines.push(findings, '');
 
-  // Said once at the top rather than on every line that lacks a name.
-  if (context.names.size === 0) {
-    lines.push('_No entity catalog was available, so ids are shown instead of names._', '');
+  // Said once at the top rather than on every line that lacks a name. Keyed on
+  // the catalog, not on whether any name is known: decision criteria supply
+  // some tag names even with no catalog at all, so an empty index is no longer
+  // the same question.
+  if (catalog === undefined) {
+    lines.push(
+      '_No entity catalog was available. Only names Keap records in decision criteria are ' +
+        'known, so most ids are shown instead of names._',
+      '',
+    );
   }
 
   lines.push('## Flow', '', '```mermaid', renderMermaid(campaign), '```', '');

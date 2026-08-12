@@ -61,3 +61,27 @@ describe('renderCampaign', () => {
     expect((page.match(/```/g) ?? []).length % 2).toBe(0);
   });
 });
+
+describe('tag names from the graph, not just the catalog', () => {
+  it('names a tag the graph learned from decision criteria', () => {
+    // buildGraph already merges catalog names over decision-criteria labels.
+    // Reading only the catalog threw away 575 tag names in se232, which has no
+    // catalog at all but 464 decisions carrying _text labels.
+    const withRules = normalizeCampaign(c987, '', {}, 'X', '987');
+    const g = buildGraph([withRules]);
+    const tag = g.entities.find((e) => e.kind === 'tag');
+    expect(tag).toBeDefined();
+    // Give that entity a label the way decision criteria would have.
+    const labelled = {
+      ...g,
+      entities: g.entities.map((e) => (e.id === tag?.id ? { ...e, label: 'Known Tag' } : e)),
+    };
+    expect(renderCampaign(withRules, labelled)).toContain('Known Tag');
+  });
+
+  it('still says once that no catalog was available', () => {
+    const c = normalizeCampaign(c987, '', {}, 'X', '987');
+    const page = renderCampaign(c, buildGraph([c]));
+    expect(page.match(/ids are shown instead of names/gi) ?? []).toHaveLength(1);
+  });
+});
