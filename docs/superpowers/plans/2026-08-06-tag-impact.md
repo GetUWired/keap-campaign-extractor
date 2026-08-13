@@ -90,7 +90,7 @@ is the artifact, the Markdown is a view of it.
   - `parseTagList(text: string, format: 'csv' | 'json'): TagList`
   - `formatFor(path: string): 'csv' | 'json'` — throws on an unrecognised extension.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/tagList.test.ts`:
 
@@ -200,7 +200,7 @@ describe('parseTagList — JSON', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npx vitest run test/tagList.test.ts
@@ -208,7 +208,7 @@ npx vitest run test/tagList.test.ts
 
 Expected: FAIL — `Cannot find module '../src/analyze/tagList.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/analyze/tagList.ts`:
 
@@ -351,7 +351,7 @@ export function parseTagList(text: string, format: 'csv' | 'json'): TagList {
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 npx vitest run test/tagList.test.ts && npm run typecheck
@@ -359,7 +359,7 @@ npx vitest run test/tagList.test.ts && npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/analyze/tagList.ts test/tagList.test.ts
@@ -384,7 +384,7 @@ git commit -m "feat: parse tag lists from CSV or JSON"
   - `interface TagImpactReport { appName; analyzedAt; tags; campaigns; noCampaignReferences; warnings }`
   - `analyzeTagImpact(appName: string, list: TagList, campaigns: NormalizedCampaign[], graph: AccountGraph): TagImpactReport`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/tagImpact.test.ts`:
 
@@ -624,7 +624,7 @@ describe('analyzeTagImpact — grouping and totals', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npx vitest run test/tagImpact.test.ts
@@ -632,7 +632,7 @@ npx vitest run test/tagImpact.test.ts
 
 Expected: FAIL — `Cannot find module '../src/analyze/tagImpact.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/analyze/tagImpact.ts`:
 
@@ -831,7 +831,7 @@ export function analyzeTagImpact(
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 npx vitest run test/tagImpact.test.ts && npm run typecheck
@@ -839,7 +839,7 @@ npx vitest run test/tagImpact.test.ts && npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/analyze/tagImpact.ts test/tagImpact.test.ts
@@ -858,7 +858,7 @@ git commit -m "feat: analyze which campaigns reference a list of tags, and where
 - Consumes: `TagImpactReport`, `ImpactLocation` from `../analyze/tagImpact.js`; `plainText` from `./text.js`.
 - Produces: `renderTagImpact(report: TagImpactReport): string`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/tagImpactDoc.test.ts`:
 
@@ -966,7 +966,7 @@ describe('renderTagImpact', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npx vitest run test/tagImpactDoc.test.ts
@@ -974,7 +974,7 @@ npx vitest run test/tagImpactDoc.test.ts
 
 Expected: FAIL — `Cannot find module '../src/render/tagImpactDoc.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/render/tagImpactDoc.ts`:
 
@@ -1079,7 +1079,7 @@ export function renderTagImpact(report: TagImpactReport): string {
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 npx vitest run test/tagImpactDoc.test.ts && npm run typecheck
@@ -1087,7 +1087,7 @@ npx vitest run test/tagImpactDoc.test.ts && npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/render/tagImpactDoc.ts test/tagImpactDoc.test.ts
@@ -1107,7 +1107,7 @@ git commit -m "feat: render the tag impact report as Markdown"
 - Consumes: everything from Tasks 1–3.
 - Produces: `npm run tag-impact -- --app <app> --tags <file>` → `artifacts/<app>/tag-impact.json` and `tag-impact.md`.
 
-- [ ] **Step 1: Write the CLI**
+- [x] **Step 1: Write the CLI**
 
 Create `src/cli/tagImpact.ts`:
 
@@ -1210,7 +1210,7 @@ async function main(): Promise<void> {
 await main();
 ```
 
-- [ ] **Step 2: Add the npm script**
+- [x] **Step 2: Add the npm script**
 
 In `package.json`, beside `"render"`:
 
@@ -1218,7 +1218,7 @@ In `package.json`, beside `"render"`:
     "tag-impact": "tsx src/cli/tagImpact.ts",
 ```
 
-- [ ] **Step 3: Write the corpus test**
+- [x] **Step 3: Write the corpus test**
 
 Create `test/tagImpactCorpus.test.ts`:
 
@@ -1267,7 +1267,7 @@ describe.skipIf(!present)('tag impact against the real se232 corpus', () => {
 });
 ```
 
-- [ ] **Step 4: Run everything**
+- [x] **Step 4: Run everything**
 
 ```bash
 npm test && npm run typecheck
@@ -1275,7 +1275,7 @@ npm test && npm run typecheck
 
 Expected: PASS, including all 382 pre-existing tests unchanged.
 
-- [ ] **Step 5: Run it against the real list**
+- [x] **Step 5: Run it against the real list**
 
 The client list uses `Delete`/`Merge` boolean columns rather than this tool's `group` column, so
 convert it first — this is the transform the spec deliberately does not cover:
@@ -1308,7 +1308,7 @@ number means a bug in this implementation, not a stale expectation.
 Note the naive split on `,` in that snippet mangles quoted names; it is fine for producing ids and a
 `group` column, and the tool's own parser handles quoting properly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/cli/tagImpact.ts test/tagImpactCorpus.test.ts package.json
@@ -1322,7 +1322,7 @@ git commit -m "feat: tag-impact CLI writing JSON and a Markdown view"
 **Files:**
 - Modify: `docs/spike-findings.md`
 
-- [ ] **Step 1: Append the section**
+- [x] **Step 1: Append the section**
 
 Append a `## 17. Tag impact analysis` section covering, with the real numbers from Task 4 step 5:
 
@@ -1340,7 +1340,7 @@ Append a `## 17. Tag impact analysis` section covering, with the real numbers fr
 
 Follow the existing sections' voice: what was observed, what it cost, what it means.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/spike-findings.md
