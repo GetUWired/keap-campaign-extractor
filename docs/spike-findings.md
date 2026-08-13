@@ -1058,3 +1058,83 @@ distinction is the work.
   `app_id=` style account is still needed.
 - **Quote status** is a real Keap goal type neither account uses; it is new and not yet widespread.
 - `smartForm` is assumed to be another form-builder generation on one instance of evidence.
+
+---
+
+## 17. Tag impact analysis
+
+Added 2026-08-06. The first thing built for a use rather than for the model: given a list of tags an
+operator intends to delete or combine, say which campaigns would be affected and where.
+
+`npm run tag-impact -- --app <app> --tags <list.csv|list.json>` → `artifacts/<app>/tag-impact.json`
+and `tag-impact.md`.
+
+### What it answers, and what it refuses to
+
+It reports **locations**: for each requested tag, every place a campaign touches it, in one of three
+kinds — a **trigger** (a goal that starts the campaign when the tag is applied), a **decision** (a
+branch that routes on it), or a **step** (a sequence step that applies or removes it), located by
+sequence name and 1-based position.
+
+It does not infer merge consequences beyond flagging a campaign that references more than one tag
+from the same combine group. It does not recommend which tags to delete. It has no write access and
+never will — nothing in this project can change a Keap account.
+
+It also does not say "safe". The word appears nowhere in the renderer, and a test asserts that.
+A tag with no campaign references is reported as exactly that, beside a caveat naming what this tool
+cannot see: saved searches, broadcasts, manual application, internal forms, integrations. The
+distinction matters because the output sits beside someone deleting tags in a live client account.
+
+### se232, against the client's real list
+
+3,518 tags marked for deletion or merging, out of 5,073 in the account.
+
+| | delete | merge | total |
+|---|---|---|---|
+| requested | 2,008 | 1,510 | 3,518 |
+| referenced by a campaign | 259 | 375 | **634** |
+| no campaign references | 1,749 | 1,135 | 2,884 |
+| trigger locations | 197 | 236 | 433 |
+| decision locations | 73 | **446** | 519 |
+| step locations | 401 | 223 | 624 |
+
+**229 of 398 campaigns are affected** — 58% of the account, from a list of tags nobody expected to
+be load-bearing.
+
+**Merges hit decisions six times harder than deletes** (446 against 73) while deletes hit steps
+nearly twice as hard (401 against 223). That asymmetry is the shape of the account, not an artifact:
+the tags being merged are the ones campaigns branch *on* — trip-completed markers, funnel stages —
+while the tags being deleted are ones campaigns merely *set*. Merging two tags a decision tests
+separately collapses two branches into one; deleting a tag a step applies leaves a step that does
+nothing. The second is a dead limb, the first is a rerouted contact.
+
+### 20 campaigns would lose every entry point — 17 of them live
+
+The finding worth leading with. For 20 campaigns, *every* goal is a tag goal and *every* one of
+those tags is on the list. Delete them all and the campaign is not broken in a way anyone would
+notice: it simply never starts again. 17 are published and running; 3 were never published.
+
+Campaign ids: 551, 7896, 8092, 8499, 8539, 11059, 11089, 11127, 11171, 11511, 11747, 11805, 11849,
+12089, 12227, 12787, 12795, 12797, 12823, 14836.
+
+(An ad-hoc pass before the tool existed reported 22, all published. 20/17 is the recomputed figure,
+under the definition stated above; the campaign and location totals reproduce the ad-hoc run exactly.)
+
+### 2,884 tags with no campaign references is not 2,884 tags to delete
+
+It is the number this tool can say nothing about. 82% of the requested list falls here, which is
+itself informative — most of these tags were probably applied by hand or by a saved search — but the
+report deliberately makes that a statement about the tool's visibility rather than about the tags.
+
+### Two gaps found by running it
+
+**Every decision in se232 is nameless.** All 179 of them. Operators name goals and sequences but
+never the diamonds between them, so the first run located 519 decision hits as "cell 1349" — a
+number that appears nowhere in the builder UI. Each decision is now named by whatever feeds it, via
+the campaign-level edge into it: *the decision after "Any purchase"*. All 179 resolve.
+
+**The client's list marks tags for merging but not what they merge into.** Its columns are `Delete`
+and `Merge` booleans; this tool's format wants a `group` column naming the merge target. Without it
+`duplicatedGroups` cannot be computed, and the merge column of the table above is really "tags
+marked for merging", not "tags merging into each other". Producing the grouped list is the
+operator's step, and the tool reads it as soon as it exists.
