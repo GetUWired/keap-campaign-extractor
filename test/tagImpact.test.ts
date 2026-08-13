@@ -1,0 +1,234 @@
+import { describe, expect, it } from 'vitest';
+import { analyzeTagImpact } from '../src/analyze/tagImpact.js';
+import { buildGraph } from '../src/normalize/graph.js';
+import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
+
+const list = (tags: { id: string; name: string; group?: string | null }[]) => ({
+  tags: tags.map((t) => ({ id: t.id, name: t.name, group: t.group ?? null })),
+  warnings: [] as string[],
+});
+
+const tagStep = (cellId: string, tagIds: string[], isApply: string, name: string | null = null) => ({
+  ...makeNode({
+    cellId,
+    style: 'tag',
+    name,
+    config: { isApply },
+    references: { tagIds, tagCategoryIds: [] },
+  }),
+  position: 0,
+});
+
+const tagGoal = (cellId: string, tagIds: string[], name: string) =>
+  makeNode({ cellId, style: 'tagApplied', name, references: { tagIds, tagCategoryIds: [] } });
+
+const tagRules = (tagId: string, label: string) => ({
+  decisionIds: ['479'],
+  flowIds: ['3'],
+  wrappers: [
+    {
+      index: 0,
+      decisionId: '479',
+      flowId: '3',
+      primaryKey: null,
+      secondaryKey: null,
+      secondaryKeyId: null,
+      any: [
+        {
+          groupId: '1',
+          all: [
+            {
+              ruleId: '2',
+              subject: null,
+              subjectLabel: null,
+              category: 'tags_FieldCategory',
+              categoryLabel: null,
+              field: null,
+              fieldLabel: null,
+              constraint: null,
+              constraintLabel: null,
+              values: [{ id: tagId, label }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  elseOptions: [],
+  elseSelected: null,
+  warnings: [],
+});
+
+describe('analyzeTagImpact — location kinds', () => {
+  it('reads a tagApplied goal as a trigger', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      name: 'Welcome',
+      goals: [tagGoal('4', ['646'], 'Signed up')],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'Bought' }]), [campaign], buildGraph([campaign]));
+    expect(report.tags[0]?.locations).toEqual([
+      {
+        campaignId: '16',
+        campaignName: 'Welcome',
+        tagId: '646',
+        tagName: 'Bought',
+        group: null,
+        kind: 'trigger',
+        edgeKind: 'listens-for',
+        cellId: '4',
+        nodeName: 'Signed up',
+      },
+    ]);
+  });
+
+  it('reads an apply-tag step as a step, with its sequence and 1-based position', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      name: 'Welcome',
+      sequences: [
+        makeSequence({
+          cellId: '3',
+          name: 'Onboarding',
+          steps: [
+            { ...makeNode({ cellId: '9', style: 'email' }), position: 0 },
+            { ...tagStep('10', ['646'], 'true', 'Mark bought'), position: 1 },
+          ],
+        }),
+      ],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'Bought' }]), [campaign], buildGraph([campaign]));
+    expect(report.tags[0]?.locations[0]).toMatchObject({
+      kind: 'step',
+      edgeKind: 'applies',
+      sequenceName: 'Onboarding',
+      stepPosition: 2,
+      nodeName: 'Mark bought',
+    });
+  });
+
+  it('distinguishes a remove-tag step from an apply', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      sequences: [makeSequence({ cellId: '3', steps: [tagStep('10', ['646'], 'false')] })],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'Bought' }]), [campaign], buildGraph([campaign]));
+    expect(report.tags[0]?.locations[0]?.edgeKind).toBe('removes');
+  });
+
+  it('reads a decision that routes on the tag as a decision', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      decisions: [
+        makeDecision({
+          cellId: '34',
+          name: 'Has bought?',
+          branches: [{ decisionId: '479', flowId: '3', rules: tagRules('646', 'Bought') }],
+        }),
+      ],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'Bought' }]), [campaign], buildGraph([campaign]));
+    expect(report.tags[0]?.locations[0]).toMatchObject({
+      kind: 'decision',
+      edgeKind: 'tests',
+      cellId: '34',
+      nodeName: 'Has bought?',
+    });
+  });
+
+  it('never counts a derived triggers edge as a location', () => {
+    // A triggers edge points campaign -> campaign, and merge consequences are
+    // out of scope. It must not appear even though it exists in the graph.
+    const applier = makeCampaign({
+      funnelId: '1',
+      sequences: [makeSequence({ cellId: '3', steps: [tagStep('10', ['646'], 'true')] })],
+    });
+    const listener = makeCampaign({ funnelId: '2', goals: [tagGoal('4', ['646'], 'Starts')] });
+    const graph = buildGraph([applier, listener]);
+    expect(graph.edges.some((e) => e.kind === 'triggers')).toBe(true);
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'B' }]), [applier, listener], graph);
+    expect(report.tags[0]?.locations.every((l) => l.edgeKind !== 'triggers')).toBe(true);
+  });
+});
+
+describe('analyzeTagImpact — grouping and totals', () => {
+  it('reports the same locations by tag and by campaign', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      goals: [tagGoal('4', ['646'], 'A')],
+      sequences: [makeSequence({ cellId: '3', steps: [tagStep('10', ['646'], 'true')] })],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'B' }]), [campaign], buildGraph([campaign]));
+    expect(report.tags[0]?.locations).toHaveLength(2);
+    expect(report.campaigns[0]?.locations).toHaveLength(2);
+    expect(report.tags[0]?.campaignCount).toBe(1);
+  });
+
+  it('lists a requested tag no campaign references, without calling it safe', () => {
+    const campaign = makeCampaign({ funnelId: '16' });
+    const report = analyzeTagImpact('x', list([{ id: '999', name: 'Unused' }]), [campaign], buildGraph([campaign]));
+    expect(report.noCampaignReferences).toEqual([{ tagId: '999', tagName: 'Unused' }]);
+    expect(report.tags.find((t) => t.tagId === '999')?.locations).toEqual([]);
+  });
+
+  it('flags a campaign referencing two tags from one combine group', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      sequences: [
+        makeSequence({
+          cellId: '3',
+          steps: [tagStep('10', ['646'], 'true'), { ...tagStep('11', ['647'], 'true'), position: 1 }],
+        }),
+      ],
+    });
+    const report = analyzeTagImpact(
+      'x',
+      list([
+        { id: '646', name: 'A', group: 'newsletter' },
+        { id: '647', name: 'B', group: 'newsletter' },
+      ]),
+      [campaign],
+      buildGraph([campaign]),
+    );
+    expect(report.campaigns[0]?.duplicatedGroups).toEqual([
+      { group: 'newsletter', tagIds: ['646', '647'] },
+    ]);
+  });
+
+  it('does not flag a campaign referencing one tag from a group', () => {
+    const campaign = makeCampaign({
+      funnelId: '16',
+      sequences: [makeSequence({ cellId: '3', steps: [tagStep('10', ['646'], 'true')] })],
+    });
+    const report = analyzeTagImpact(
+      'x',
+      list([{ id: '646', name: 'A', group: 'newsletter' }]),
+      [campaign],
+      buildGraph([campaign]),
+    );
+    expect(report.campaigns[0]?.duplicatedGroups).toEqual([]);
+  });
+
+  it('warns about a campaign whose decision criteria are missing', () => {
+    // 2 of 464 decisions in se232 have no criteria on disk. Any tag they route
+    // on is invisible, so the report must say it cannot see everything.
+    const campaign = makeCampaign({
+      funnelId: '16',
+      name: 'Has a blind decision',
+      decisions: [makeDecision({ cellId: '34', branches: [{ decisionId: '1', flowId: '2', rules: null }] })],
+    });
+    const report = analyzeTagImpact('x', list([{ id: '646', name: 'B' }]), [campaign], buildGraph([campaign]));
+    expect(report.warnings.some((w) => /16.*criteria/i.test(w))).toBe(true);
+  });
+
+  it("carries the list's own warnings through", () => {
+    const campaign = makeCampaign({ funnelId: '16' });
+    const report = analyzeTagImpact(
+      'x',
+      { tags: [], warnings: ['a row has no id and was skipped'] },
+      [campaign],
+      buildGraph([campaign]),
+    );
+    expect(report.warnings).toContain('a row has no id and was skipped');
+  });
+});
