@@ -7,3 +7,8 @@ artifacts/
 .claude/settings.local.json
 *.log
 .DS_Store
+
+# Client tag lists — contain account data and contact counts
+tag-list.csv
+*-tag-list.csv
+tag-impact.*
