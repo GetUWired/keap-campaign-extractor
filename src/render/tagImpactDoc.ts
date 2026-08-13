@@ -27,10 +27,13 @@ function describeLocation(location: ImpactLocation): string {
     return `**Trigger** — goal ${goal} starts this campaign when ${tag} is applied`;
   }
   if (location.kind === 'decision') {
+    // Decisions are nearly always nameless, so say what feeds it instead.
     const name =
-      location.nodeName === null || location.nodeName === undefined
-        ? `cell ${location.cellId}`
-        : `"${cell(location.nodeName)}"`;
+      location.nodeName !== null && location.nodeName !== undefined
+        ? `"${cell(location.nodeName)}"`
+        : location.after !== undefined
+          ? `the decision after "${cell(location.after)}" (cell ${location.cellId})`
+          : `cell ${location.cellId}`;
     return `**Decision** — ${name} routes on ${tag}`;
   }
   const sequence =

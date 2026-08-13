@@ -232,3 +232,39 @@ describe('analyzeTagImpact — grouping and totals', () => {
     expect(report.warnings).toContain('a row has no id and was skipped');
   });
 });
+
+describe('naming an unnamed decision', () => {
+  // Operators name goals and sequences but almost never the diamonds between
+  // them, so "cell 1349" would be the only handle an operator got otherwise.
+  const withEdges = (edges: { cellId: string; source: string; target: string; scope: string }[]) =>
+    makeCampaign({
+      funnelId: '11119',
+      name: 'Trips',
+      goals: [tagGoal('14', ['700'], 'Any purchase')],
+      decisions: [
+        makeDecision({
+          cellId: '1349',
+          name: null,
+          branches: [{ decisionId: '479', flowId: '3', rules: tagRules('646', 'Bought') }],
+        }),
+      ],
+      edges,
+    });
+
+  const decisionIn = (campaign: ReturnType<typeof withEdges>) =>
+    analyzeTagImpact(
+      'x',
+      list([{ id: '646', name: 'Bought' }]),
+      [campaign],
+      buildGraph([campaign]),
+    ).campaigns[0]?.locations.find((l) => l.kind === 'decision');
+
+  it('locates it by whatever feeds it on the canvas', () => {
+    const campaign = withEdges([{ cellId: '1350', source: '14', target: '1349', scope: '1' }]);
+    expect(decisionIn(campaign)?.after).toBe('Any purchase');
+  });
+
+  it('leaves it unset when nothing named feeds the decision', () => {
+    expect(decisionIn(withEdges([]))?.after).toBeUndefined();
+  });
+});

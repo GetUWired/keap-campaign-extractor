@@ -19,6 +19,8 @@ export interface ImpactLocation {
   stepPosition?: number;
   /** The node's own name — the operator's words for why it is there. */
   nodeName?: string | null;
+  /** For an unnamed decision: the name of whatever feeds it on the canvas. */
+  after?: string;
 }
 
 export interface TagImpact {
@@ -60,6 +62,29 @@ interface Placement {
   sequenceName?: string;
   stepPosition?: number;
   nodeName: string | null;
+  after?: string;
+}
+
+/**
+ * Names an unnamed decision by whatever feeds it.
+ *
+ * Operators name goals and sequences but almost never the decision diamonds
+ * between them — every one of se232's 179 is nameless — so "cell 1349" is the
+ * only thing left to print, and it is not something anyone can find in the
+ * builder. The campaign-level edge into it gives "the decision after Any
+ * purchase", which is.
+ */
+function upstreamName(campaign: NormalizedCampaign, cellId: string): string | undefined {
+  const named = new Map<string, string | null>();
+  for (const node of [...campaign.goals, ...campaign.sequences, ...campaign.decisions]) {
+    named.set(node.cellId, node.name);
+  }
+  for (const edge of campaign.edges) {
+    if (edge.target !== cellId || edge.scope !== '1') continue;
+    const name = named.get(edge.source);
+    if (name !== null && name !== undefined && name !== '') return name;
+  }
+  return undefined;
 }
 
 /**
@@ -74,7 +99,13 @@ function placeCell(campaign: NormalizedCampaign, cellId: string, fallback: Locat
     if (goal.cellId === cellId) return { kind: 'trigger', nodeName: goal.name };
   }
   for (const decision of campaign.decisions) {
-    if (decision.cellId === cellId) return { kind: 'decision', nodeName: decision.name };
+    if (decision.cellId !== cellId) continue;
+    const placement: Placement = { kind: 'decision', nodeName: decision.name };
+    if (decision.name === null || decision.name === '') {
+      const after = upstreamName(campaign, cellId);
+      if (after !== undefined) placement.after = after;
+    }
+    return placement;
   }
   for (const sequence of campaign.sequences) {
     const index = sequence.steps.findIndex((step) => step.cellId === cellId);
@@ -133,6 +164,7 @@ export function analyzeTagImpact(
     };
     if (placement.sequenceName !== undefined) location.sequenceName = placement.sequenceName;
     if (placement.stepPosition !== undefined) location.stepPosition = placement.stepPosition;
+    if (placement.after !== undefined) location.after = placement.after;
 
     byTag.set(tagId, [...(byTag.get(tagId) ?? []), location]);
     byCampaign.set(campaignId, [...(byCampaign.get(campaignId) ?? []), location]);
