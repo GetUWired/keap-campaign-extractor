@@ -338,6 +338,9 @@ The filters are separate labelled groups, and each narrows something different:
 - **`tag:13269`** matches that tag exactly. Plain `13269` also matches tag 17390 and friends, because
   ids substring-match.
 - **By tag** ranks tags by how many *live* campaigns they touch, and links through to them.
+- **No campaign references** lists every requested tag no campaign uses, with its delete/merge
+  marking. It carries its own caveat, because it is the tab most likely to be read as a
+  green light: not used by a campaign is not the same as not used.
 
 Each affected campaign expands to show every location, grouped by kind:
 

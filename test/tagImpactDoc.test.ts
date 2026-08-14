@@ -46,14 +46,14 @@ describe('renderTagImpact', () => {
   it('never uses the word "safe"', () => {
     // This report sits beside someone deleting tags in a live client account.
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused' }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
     );
     expect(page.toLowerCase()).not.toContain('safe');
   });
 
   it('says what "no campaign references" does and does not mean', () => {
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused' }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
     );
     expect(page).toMatch(/no campaign references/i);
     expect(page).toMatch(/not visible to this tool/i);
@@ -103,7 +103,7 @@ describe('renderTagImpact', () => {
 
   it('escapes a pipe in a name so the Markdown table survives', () => {
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '1', tagName: 'A | B' }] }),
+      report({ noCampaignReferences: [{ tagId: '1', tagName: 'A | B', group: null }] }),
     );
     const row = page.split('\n').find((l) => l.startsWith('| 1 |')) ?? '';
     expect(row).toContain('A \\| B');

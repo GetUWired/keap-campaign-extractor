@@ -171,9 +171,11 @@ export function renderTagImpact(report: TagImpactReport): string {
     lines.push('## No campaign references', '');
     lines.push('No campaign uses these tags as a trigger, in a decision, or in a sequence step.');
     lines.push('**Other uses are not visible to this tool** — see the note at the top.', '');
-    lines.push('| Tag id | Name |', '|---|---|');
+    lines.push('| Tag id | Name | Change |', '|---|---|---|');
     for (const tag of report.noCampaignReferences) {
-      lines.push(`| ${tag.tagId} | ${cell(tag.tagName)} |`);
+      const change =
+        tag.group === null ? 'delete' : showGroup ? `merge → ${cell(tag.group)}` : 'merge';
+      lines.push(`| ${tag.tagId} | ${cell(tag.tagName)} | ${change} |`);
     }
     lines.push('');
   }

@@ -103,6 +103,7 @@ h1 { font-size: 22px; margin: 0 0 4px; }
   color: var(--muted);
 }
 .caveat strong { color: var(--ink); }
+.strong-caveat { border-left-color: var(--live); margin-top: 14px; }
 .cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
 .card {
   flex: 1 1 150px;
@@ -457,11 +458,59 @@ function tagRows() {
 function render() {
   const campaignsView = document.getElementById('campaigns');
   const tagsView = document.getElementById('tags');
+  const unreferencedView = document.getElementById('unreferenced');
   const countLine = document.getElementById('count');
   campaignsView.classList.toggle('hidden', state.view !== 'campaigns');
   tagsView.classList.toggle('hidden', state.view !== 'tags');
-  // The sort applies to campaign cards; the tag table has its own order.
+  unreferencedView.classList.toggle('hidden', state.view !== 'unreferenced');
+  // The sort applies to campaign cards; the tag tables have their own order.
   document.getElementById('sort').classList.toggle('hidden', state.view !== 'campaigns');
+  // A tag no campaign references appears in no campaign and at no location, so
+  // only the delete/merge filter can narrow that list. Showing the others would
+  // imply they do something.
+  for (const group of document.querySelectorAll('.group')) {
+    const appliesHere =
+      state.view !== 'unreferenced' || group.querySelector('[data-change]') !== null;
+    group.classList.toggle('hidden', !appliesHere);
+  }
+
+  if (state.view === 'unreferenced') {
+    const query = parseQuery(state.q);
+    const rows = (DATA.noCampaignReferences ?? []).filter((tag) => {
+      const change = tag.group === null || tag.group === undefined ? 'delete' : 'merge';
+      if (!state.changes.has(change)) return false;
+      if (query.exactTagId !== null) return tag.tagId === query.exactTagId;
+      if (!query.text) return true;
+      return tag.tagName.toLowerCase().includes(query.text) || tag.tagId.includes(query.text);
+    });
+    const body = unreferencedView.querySelector('tbody');
+    body.replaceChildren();
+    countLine.replaceChildren();
+    countLine.append(
+      'Showing ',
+      el('b', null, String(rows.length)),
+      ' of ' + (DATA.noCampaignReferences ?? []).length + ' tags with no campaign reference',
+    );
+    const frag = document.createDocumentFragment();
+    for (const tag of rows) {
+      const change = tag.group === null || tag.group === undefined ? 'delete' : 'merge';
+      const tr = el('tr');
+      const idCell = el('td');
+      idCell.append(el('span', 'tagid', tag.tagId));
+      tr.append(idCell);
+      const nameCell = el('td');
+      nameCell.append(withMatch(tag.tagName, query.text));
+      tr.append(nameCell);
+      const changeCell = el('td');
+      changeCell.append(
+        el('span', 'badge ' + change, change === 'merge' && SHOW_GROUP ? 'merge → ' + tag.group : change),
+      );
+      tr.append(changeCell);
+      frag.append(tr);
+    }
+    body.append(frag);
+    return;
+  }
 
   if (state.view === 'campaigns') {
     const rows = filtered();
@@ -650,6 +699,7 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
     appName: report.appName,
     analyzedAt: report.analyzedAt,
     campaigns: report.campaigns,
+    noCampaignReferences: report.noCampaignReferences,
     warnings: report.warnings,
   };
 
@@ -723,6 +773,7 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-view="campaigns" aria-selected="true">By campaign</button>
     <button class="tab" role="tab" data-view="tags" aria-selected="false">By tag</button>
+    <button class="tab" role="tab" data-view="unreferenced" aria-selected="false">No campaign references (${report.noCampaignReferences.length.toLocaleString()})</button>
   </div>
 </header>
 
@@ -766,6 +817,18 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
       <th>Tag</th><th>Name</th><th>Change</th><th class="num">Campaigns</th><th class="num">Live</th>
       <th class="num">Trig</th><th class="num">Dec</th><th class="num">Step</th><th></th>
     </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="unreferenced" class="hidden">
+  <div class="caveat strong-caveat">
+    <strong>These tags are not used by any campaign — that is all this says.</strong>
+    They may still be applied by saved searches, broadcasts, internal forms, integrations, or by hand.
+    This tool cannot see any of those. Check a tag's usage in Keap before removing it.
+  </div>
+  <table>
+    <thead><tr><th>Tag</th><th>Name</th><th>Change</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>

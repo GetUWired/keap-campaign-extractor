@@ -159,6 +159,41 @@ describe('renderTagImpactHtml', () => {
     expect(page).not.toContain('once deletions are done');
   });
 
+  it('gives the unreferenced tags their own tab, with the count in the label', () => {
+    const page = renderTagImpactHtml(
+      report({
+        noCampaignReferences: [
+          { tagId: '999', tagName: 'Unused', group: null },
+          { tagId: '998', tagName: 'Also unused', group: 'newsletter' },
+        ],
+      }),
+    );
+    expect(page).toContain('data-view="unreferenced"');
+    expect(page).toContain('No campaign references (2)');
+  });
+
+  it('embeds those tags with the change each one is undergoing', () => {
+    const page = renderTagImpactHtml(
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: 'newsletter' }] }),
+    );
+    const payload = payloadOf(page) as unknown as {
+      noCampaignReferences: { tagId: string; group: string | null }[];
+    };
+    expect(payload.noCampaignReferences).toEqual([
+      { tagId: '999', tagName: 'Unused', group: 'newsletter' },
+    ]);
+  });
+
+  it('puts the caveat beside that list, not only in the header', () => {
+    // This is the tab someone reads as "these are fine to delete".
+    const page = renderTagImpactHtml(
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
+    );
+    expect(page).toMatch(/not used by any campaign — that is all this says/i);
+    expect(page).toMatch(/before removing it/i);
+    expect(page.toLowerCase()).not.toContain('safe');
+  });
+
   it('offers a way back out of a filtered state', () => {
     expect(renderTagImpactHtml(report())).toContain('id="reset"');
   });

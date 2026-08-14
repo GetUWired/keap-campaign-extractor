@@ -82,7 +82,7 @@ export interface TagImpactReport {
   tags: TagImpact[];
   campaigns: CampaignImpact[];
   /** Requested tags no campaign references. NOT the same as "safe to delete". */
-  noCampaignReferences: { tagId: string; tagName: string }[];
+  noCampaignReferences: { tagId: string; tagName: string; group: string | null }[];
   /** How many affected campaigns are themselves slated for deletion. */
   plannedDeletions: number;
   warnings: string[];
@@ -285,7 +285,7 @@ export function analyzeTagImpact(
     campaigns: campaignImpacts,
     noCampaignReferences: tags
       .filter((t) => t.locations.length === 0)
-      .map((t) => ({ tagId: t.tagId, tagName: t.tagName })),
+      .map((t) => ({ tagId: t.tagId, tagName: t.tagName, group: t.group })),
     plannedDeletions: campaignImpacts.filter((c) => c.plannedDeletion).length,
     warnings,
   };
