@@ -69,6 +69,62 @@ describe('parseTagList — CSV', () => {
   });
 });
 
+describe('parseTagList — a tag export with Delete/Merge columns', () => {
+  // The real export lists the whole account and flags a subset: 6,227 rows,
+  // 2,008 deletes, 1,510 merges. Reading every row would request 2,709 tags
+  // nobody intends to touch.
+  const csv =
+    'id,Delete,Keep,Merge,tag_name\n' +
+    '1,TRUE,FALSE,FALSE,Bin me\n' +
+    '2,FALSE,TRUE,FALSE,Keep me\n' +
+    '3,FALSE,FALSE,TRUE,Fold me in\n';
+
+  it('takes only the flagged rows', () => {
+    expect(parseTagList(csv, 'csv').tags.map((t) => t.id)).toEqual(['1', '3']);
+  });
+
+  it('reads Delete as a deletion and Merge as a combine', () => {
+    const tags = parseTagList(csv, 'csv').tags;
+    expect(tags.find((t) => t.id === '1')?.group).toBeNull();
+    expect(tags.find((t) => t.id === '3')?.group).not.toBeNull();
+  });
+
+  it('reads the name from tag_name', () => {
+    expect(parseTagList(csv, 'csv').tags[0]?.name).toBe('Bin me');
+  });
+
+  it('says the merge targets are unknown, since duplicates cannot be found without them', () => {
+    const list = parseTagList(csv, 'csv');
+    expect(list.warnings.some((w) => /no group column/i.test(w))).toBe(true);
+  });
+
+  it('prefers a real group column when the export has one', () => {
+    const withGroup = 'id,Delete,Merge,tag_name,group\n3,FALSE,TRUE,Fold me in,newsletter\n';
+    expect(parseTagList(withGroup, 'csv').tags[0]?.group).toBe('newsletter');
+  });
+
+  it('treats a row flagged for both as a combine, and says so', () => {
+    const both = 'id,Delete,Merge,tag_name\n1,TRUE,TRUE,Confused\n';
+    const list = parseTagList(both, 'csv');
+    expect(list.tags[0]?.group).not.toBeNull();
+  });
+
+  it('says so when the columns exist but nothing is flagged', () => {
+    const none = 'id,Delete,Merge,tag_name\n1,FALSE,FALSE,Untouched\n';
+    const list = parseTagList(none, 'csv');
+    expect(list.tags).toEqual([]);
+    expect(list.warnings.some((w) => /no row is marked/i.test(w))).toBe(true);
+  });
+
+  it('leaves a plain id/name/group list alone', () => {
+    const plain = 'id,name,group\n1,A,\n2,B,newsletter\n';
+    expect(parseTagList(plain, 'csv').tags).toEqual([
+      { id: '1', name: 'A', group: null },
+      { id: '2', name: 'B', group: 'newsletter' },
+    ]);
+  });
+});
+
 describe('parseTagList — JSON', () => {
   it('reads delete and combine into one list', () => {
     const json = JSON.stringify({

@@ -46,6 +46,48 @@ describe('parseDeletionList — CSV', () => {
   });
 });
 
+describe('parseDeletionList — a Delete flag column', () => {
+  // The real spreadsheet lists the whole account and flags a subset: 190 rows,
+  // 107 flagged. Ignoring the column would plan 83 deletions nobody asked for.
+  const csv = 'Id,Name,Delete?,Notes\n11,Keep me,FALSE,\n22,Bin me,TRUE,\n33,Also bin,TRUE,\n';
+
+  it('takes only the flagged rows', () => {
+    expect(parseDeletionList(csv, 'csv').campaigns.map((c) => c.campaignId)).toEqual(['22', '33']);
+  });
+
+  it('accepts the ways a person writes yes in a spreadsheet', () => {
+    for (const yes of ['TRUE', 'true', 'Yes', 'y', 'X', '1']) {
+      const list = parseDeletionList(`Id,Delete?\n7,${yes}\n`, 'csv');
+      expect(list.campaigns.map((c) => c.campaignId)).toEqual(['7']);
+    }
+  });
+
+  it('treats blank and FALSE alike', () => {
+    const list = parseDeletionList('Id,Delete?\n7,\n8,FALSE\n9,no\n', 'csv');
+    expect(list.campaigns).toEqual([]);
+  });
+
+  it('finds the column whatever it is called', () => {
+    for (const column of ['Delete', 'Delete?', 'Remove', 'To Delete']) {
+      const list = parseDeletionList(`Id,${column}\n7,TRUE\n`, 'csv');
+      expect(list.campaigns).toHaveLength(1);
+    }
+  });
+
+  it('says so when a flag column exists but nothing is flagged', () => {
+    // Otherwise an empty result reads as "no campaigns are being deleted".
+    const list = parseDeletionList('Id,Delete?\n7,FALSE\n', 'csv');
+    expect(list.campaigns).toEqual([]);
+    expect(list.warnings.some((w) => /no row is marked/i.test(w))).toBe(true);
+  });
+
+  it('still treats every row as a deletion when there is no flag column', () => {
+    const list = parseDeletionList('id,name\n7,A\n8,B\n', 'csv');
+    expect(list.campaigns).toHaveLength(2);
+    expect(list.warnings).toEqual([]);
+  });
+});
+
 describe('parseDeletionList — JSON', () => {
   it('reads a delete array of objects', () => {
     const json = JSON.stringify({ delete: [{ id: '11119', name: 'Welcome' }] });

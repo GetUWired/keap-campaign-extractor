@@ -20,6 +20,18 @@ export interface DeletionList {
 const ID_COLUMNS = ['id', 'campaign_id', 'campaignid', 'funnel_id', 'funnelid'];
 const NAME_COLUMNS = ['name', 'campaign_name', 'campaignname'];
 
+/**
+ * A column marking which rows are actually being deleted.
+ *
+ * A working spreadsheet lists the whole account and flags a subset — the real
+ * one has 190 rows and 107 flags. Without this the other 83 would be reported
+ * as planned deletions, which is the opposite of what the operator meant.
+ */
+const FLAG_COLUMNS = ['delete', 'delete?', 'remove', 'remove?', 'to delete', 'to_delete'];
+
+/** Spreadsheet truth: TRUE from a formula, or a hand-typed yes/x/1. */
+const TRUTHY = new Set(['true', 'yes', 'y', 'x', '1']);
+
 interface JsonDeletionList {
   delete?: ({ id?: string; campaignId?: string; name?: string } | string | number)[];
 }
@@ -72,6 +84,22 @@ export function parseDeletionList(text: string, format: 'csv' | 'json'): Deletio
   }
   const nameAt = columnFor(NAME_COLUMNS);
 
-  for (const row of rows.slice(1)) add(row[idAt] ?? '', nameAt >= 0 ? (row[nameAt] ?? '') : '');
+  const flagAt = columnFor(FLAG_COLUMNS);
+  const body = rows.slice(1);
+
+  for (const row of body) {
+    // With no flag column every row is a deletion — a list of just the ones to
+    // delete. With one, only the flagged rows are.
+    if (flagAt >= 0 && !TRUTHY.has((row[flagAt] ?? '').trim().toLowerCase())) continue;
+    add(row[idAt] ?? '', nameAt >= 0 ? (row[nameAt] ?? '') : '');
+  }
+
+  if (flagAt >= 0 && seen.size === 0 && body.length > 0) {
+    warnings.push(
+      `the campaign list has a "${header[flagAt]?.trim()}" column but no row is marked — ` +
+        `nothing is treated as a planned deletion`,
+    );
+  }
+
   return { campaigns: [...seen.values()], warnings };
 }

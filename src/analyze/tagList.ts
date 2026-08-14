@@ -5,6 +5,15 @@ export interface RequestedTag {
   group: string | null;
 }
 
+/** Spreadsheet truth: TRUE from a formula, or a hand-typed yes/x/1. */
+const TRUTHY = new Set(['true', 'yes', 'y', 'x', '1']);
+
+/**
+ * The group given to a tag flagged for merging by a list that does not say what
+ * it merges into. Both renderers hide a group name the whole list shares.
+ */
+export const MERGE_UNSPECIFIED = 'merging';
+
 export interface TagList {
   tags: RequestedTag[];
   warnings: string[];
@@ -117,19 +126,53 @@ export function parseTagList(text: string, format: 'csv' | 'json'): TagList {
   const header = rows[0];
   if (header === undefined) throw new Error('the list is empty');
 
-  const column = (name: string): number => header.findIndex((h) => h.trim().toLowerCase() === name);
-  const idAt = column('id');
+  const column = (...names: string[]): number =>
+    header.findIndex((h) => names.includes(h.trim().toLowerCase()));
+  const idAt = column('id', 'tag_id', 'tagid');
   if (idAt < 0) throw new Error('the CSV has no id column, so no row can be used');
-  const nameAt = column('name');
+  const nameAt = column('name', 'tag_name', 'tagname');
   // A plain delete list should not have to carry an empty group column.
-  const groupAt = column('group');
+  const groupAt = column('group', 'merge_group', 'merge group', 'merge_into', 'merge into');
 
-  const entries = rows.slice(1).map((row) => ({
-    id: row[idAt] ?? '',
-    name: nameAt >= 0 ? (row[nameAt] ?? '') : '',
-    group:
-      groupAt >= 0 && (row[groupAt] ?? '').trim() !== '' ? (row[groupAt] as string).trim() : null,
-  }));
+  // A tag export lists the whole account and flags a subset in Delete and Merge
+  // columns — 6,227 rows, 2,008 deletes, 1,510 merges. Reading every row as a
+  // deletion would request 2,709 tags nobody intends to touch and report the
+  // campaigns using them as affected.
+  const deleteAt = column('delete', 'delete?');
+  const mergeAt = column('merge', 'merge?');
+  const flagged = deleteAt >= 0 || mergeAt >= 0;
+  const isSet = (row: string[], at: number): boolean =>
+    at >= 0 && TRUTHY.has((row[at] ?? '').trim().toLowerCase());
+
+  const entries: { id: string; name: string; group: string | null }[] = [];
+  for (const row of rows.slice(1)) {
+    const id = row[idAt] ?? '';
+    const name = nameAt >= 0 ? (row[nameAt] ?? '') : '';
+    const named = groupAt >= 0 && (row[groupAt] ?? '').trim() !== '' ? row[groupAt]?.trim() : null;
+
+    if (!flagged) {
+      entries.push({ id, name, group: named ?? null });
+      continue;
+    }
+    const merging = isSet(row, mergeAt);
+    const deleting = isSet(row, deleteAt);
+    if (!merging && !deleting) continue;
+    // A flagged merge with no target column still needs a group, or it would
+    // read as a deletion. One shared placeholder says "merging" and nothing
+    // more, which is exactly what the file knows.
+    if (merging) entries.push({ id, name, group: named ?? MERGE_UNSPECIFIED });
+    else entries.push({ id, name, group: null });
+  }
+
+  if (flagged && entries.length === 0 && rows.length > 1) {
+    warnings.push('the list has Delete/Merge columns but no row is marked in either');
+  }
+  if (flagged && mergeAt >= 0 && groupAt < 0 && entries.some((e) => e.group !== null)) {
+    warnings.push(
+      'tags are marked for merging but the list has no group column saying what they merge into, ' +
+        'so campaigns referencing two tags from one merge group cannot be identified',
+    );
+  }
 
   return { tags: collect(entries, warnings), warnings };
 }

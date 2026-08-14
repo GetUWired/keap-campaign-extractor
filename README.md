@@ -235,10 +235,15 @@ JSON works too (`.json` extension):
 }
 ```
 
-> **If your list came from a Keap tag export** it probably has `Delete` and `Merge` boolean columns
-> rather than a `group` column. Booleans say *that* a tag is merging but not *what into*, so
-> duplicate-step detection cannot run. Convert the ids across and add real group names where you know
-> them — one group name per set of tags that become a single tag.
+**A tag export works as-is.** If your file lists the whole account with `Delete` and `Merge` boolean
+columns — the shape Keap exports — pass it straight in. Only rows flagged `TRUE` in one of them are
+requested: `Delete` means delete outright, `Merge` means combine. `tag_id` and `tag_name` are
+accepted as the id and name columns.
+
+> The one thing booleans cannot say is *what* each tag merges into. Without a `group` column the
+> report can still show every merge location, but it cannot flag a campaign that references two tags
+> destined to become one — it says so in a warning. Add a `group` column naming each merge target
+> when you want that.
 
 ### 7b. Run it
 
@@ -287,6 +292,18 @@ id,name
 `id` is required; `campaign_id`, `campaignId`, `funnel_id` and `funnelId` all work as the column
 name, so a Keap export needs no editing. `name` is optional. JSON works too — either
 `{"delete": [{"id": "11307"}]}` or a bare `["11307", "12787"]`.
+
+**A working spreadsheet works as-is too.** If the file lists every campaign and flags a subset in a
+`Delete` or `Delete?` column, only the flagged rows count:
+
+```csv
+Id,Name,Categories,Active Contacts,Delete?,Notes
+11307,Cruises Abandon Cart,,0,TRUE,superseded
+12929,Pre-Trip Concierge,,174,FALSE,
+```
+
+`TRUE`, `yes`, `y`, `x` and `1` all read as flagged; blank and `FALSE` do not. If the column exists
+but nothing is flagged, the run says so rather than reporting no planned deletions.
 
 The run then reports both numbers:
 

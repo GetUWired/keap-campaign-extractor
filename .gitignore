@@ -8,7 +8,9 @@ artifacts/
 *.log
 .DS_Store
 
-# Client tag lists — contain account data and contact counts
+# Client lists — account data, contact counts, campaign names
 tag-list.csv
 *-tag-list.csv
+automations-list.csv
+*-automations-list.csv
 tag-impact.*
