@@ -8,6 +8,7 @@ import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { AccountGraph } from '../normalize/graph.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
 import { renderTagImpact } from '../render/tagImpactDoc.js';
+import { renderTagImpactHtml } from '../render/tagImpactHtml.js';
 
 function fail(message: string): void {
   console.error(`\n${message}\n`);
@@ -88,8 +89,10 @@ async function main(): Promise<void> {
   const report = analyzeTagImpact(app, list, campaigns, graph, summaries);
   const jsonPath = join('artifacts', app, 'tag-impact.json');
   const mdPath = join('artifacts', app, 'tag-impact.md');
+  const htmlPath = join('artifacts', app, 'tag-impact.html');
   await writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf8');
   await writeFile(mdPath, renderTagImpact(report), 'utf8');
+  await writeFile(htmlPath, renderTagImpactHtml(report), 'utf8');
 
   const locations = report.campaigns.reduce((n, c) => n + c.locations.length, 0);
   const kinds = { trigger: 0, decision: 0, step: 0 };
@@ -115,7 +118,7 @@ async function main(): Promise<void> {
   if (report.warnings.length > 5) {
     console.log(`  … and ${report.warnings.length - 5} more warnings`);
   }
-  console.log(`  output: ${jsonPath}\n          ${mdPath}\n`);
+  console.log(`  output: ${jsonPath}\n          ${mdPath}\n          ${htmlPath}\n`);
 }
 
 await main();
