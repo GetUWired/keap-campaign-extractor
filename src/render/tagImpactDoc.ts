@@ -74,6 +74,7 @@ function describeLocation(location: ImpactLocation, showGroup: boolean): string 
 /** The status line under a campaign heading: what it is, and who is in it. */
 function describeStatus(campaign: CampaignImpact): string {
   const parts = [`**${STATUS_LABEL[campaign.status]}**`];
+  if (campaign.plannedDeletion) parts.push('**on the campaign deletion list**');
   if (campaign.status === 'live' && campaign.publishedDate !== null) {
     parts.push(`published ${cell(campaign.publishedDate)}`);
   }
@@ -108,6 +109,12 @@ export function renderTagImpact(report: TagImpactReport): string {
   lines.push(`| Referenced by at least one campaign | ${referenced.length} |`);
   lines.push(`| No campaign references | ${report.noCampaignReferences.length} |`);
   lines.push(`| Campaigns affected | ${report.campaigns.length} |`);
+  if (report.plannedDeletions > 0) {
+    lines.push(`| …themselves being deleted | ${report.plannedDeletions} |`);
+    lines.push(
+      `| …still affected afterwards | ${report.campaigns.length - report.plannedDeletions} |`,
+    );
+  }
   lines.push(`| Affected locations | ${locations} |`);
   lines.push('');
 

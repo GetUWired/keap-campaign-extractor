@@ -175,6 +175,9 @@ details[open] > summary::before { content: "▾"; }
 .pill.live { color: var(--live); background: var(--live-bg); }
 .pill.stopped { color: var(--stopped); background: var(--stopped-bg); }
 .pill.never-published, .pill.unknown { color: var(--never); background: var(--never-bg); }
+.pill.deleting { color: var(--del); background: var(--del-bg); }
+/* Its breakage is moot, so it should not compete with campaigns that matter. */
+details.campaign.deleting summary .cname { opacity: .65; text-decoration: line-through; }
 .meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
 .body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
 .warn {
@@ -225,6 +228,7 @@ const state = {
   statuses: new Set(['live', 'stopped', 'never-published', 'unknown']),
   kinds: new Set(['trigger', 'decision', 'step']),
   changes: new Set(['delete', 'merge']),
+  plans: new Set(['deleting', 'keeping']),
   sort: 'default',
 };
 
@@ -308,6 +312,7 @@ function filtered() {
   const rows = [];
   for (const campaign of DATA.campaigns) {
     if (!state.statuses.has(campaign.status)) continue;
+    if (!state.plans.has(campaign.plannedDeletion ? 'deleting' : 'keeping')) continue;
     // A campaign name match shows all of that campaign's locations, not none.
     const nameHit =
       !!q && ((campaign.campaignName ?? '').toLowerCase().includes(q) || campaign.campaignId.includes(q));
@@ -370,6 +375,10 @@ function campaignCard(row) {
   name.className = 'cname';
   summary.append(name, el('span', 'cid', '#' + campaign.campaignId));
   summary.append(el('span', 'pill ' + campaign.status, STATUS_LABEL[campaign.status] ?? campaign.status));
+  if (campaign.plannedDeletion) {
+    details.classList.add('deleting');
+    summary.append(el('span', 'pill deleting', 'campaign being deleted'));
+  }
 
   const bits = [];
   if (campaign.activeContacts !== null) bits.push(campaign.activeContacts.toLocaleString() + ' active');
@@ -414,6 +423,7 @@ function tagRows() {
   const byTag = new Map();
   for (const campaign of DATA.campaigns) {
     if (!state.statuses.has(campaign.status)) continue;
+    if (!state.plans.has(campaign.plannedDeletion ? 'deleting' : 'keeping')) continue;
     for (const loc of campaign.locations) {
       if (!state.kinds.has(loc.kind)) continue;
       if (!state.changes.has(changeOf(loc))) continue;
@@ -474,7 +484,9 @@ function render() {
             ? 'No location type is selected — pick at least one of Trigger, Decision or Sequence step.'
             : state.changes.size === 0
               ? 'No tag change is selected — pick Delete, Merge or both.'
-              : 'Nothing matches those filters.';
+              : state.plans.size === 0
+                ? 'No campaign plan is selected — pick Being deleted, Keeping or both.'
+                : 'Nothing matches those filters.';
       campaignsView.append(el('div', 'empty', why));
       return;
     }
@@ -551,18 +563,27 @@ document.getElementById('q').addEventListener('input', (event) => {
 const ALL_STATUSES = ['live', 'stopped', 'never-published', 'unknown'];
 const ALL_KINDS = ['trigger', 'decision', 'step'];
 const ALL_CHANGES = ['delete', 'merge'];
+const ALL_PLANS = ['deleting', 'keeping'];
 
 /** Which state set a chip belongs to. */
 const setFor = (chip) =>
-  chip.dataset.status ? state.statuses : chip.dataset.kind ? state.kinds : state.changes;
-const keyFor = (chip) => chip.dataset.status ?? chip.dataset.kind ?? chip.dataset.change;
+  chip.dataset.status
+    ? state.statuses
+    : chip.dataset.kind
+      ? state.kinds
+      : chip.dataset.change
+        ? state.changes
+        : state.plans;
+const keyFor = (chip) =>
+  chip.dataset.status ?? chip.dataset.kind ?? chip.dataset.change ?? chip.dataset.plan;
 
 /** Whether anything is narrowed, which is what the reset link is for. */
 const isFiltered = () =>
   state.q.trim() !== '' ||
   state.statuses.size !== ALL_STATUSES.length ||
   state.kinds.size !== ALL_KINDS.length ||
-  state.changes.size !== ALL_CHANGES.length;
+  state.changes.size !== ALL_CHANGES.length ||
+  state.plans.size !== ALL_PLANS.length;
 
 function syncChips() {
   for (const chip of document.querySelectorAll('.chip')) {
@@ -588,6 +609,7 @@ document.getElementById('reset').addEventListener('click', () => {
   state.statuses = new Set(ALL_STATUSES);
   state.kinds = new Set(ALL_KINDS);
   state.changes = new Set(ALL_CHANGES);
+  state.plans = new Set(ALL_PLANS);
   syncChips();
   render();
 });
@@ -618,6 +640,8 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
   const locations = report.campaigns.reduce((n, c) => n + c.locations.length, 0);
   const referenced = report.tags.filter((t) => t.locations.length > 0).length;
   const live = report.campaigns.filter((c) => c.status === 'live');
+  // Campaigns being deleted anyway are not work; the difference is.
+  const needAttention = report.campaigns.length - report.plannedDeletions;
   const liveContacts = live.reduce((n, c) => n + (c.activeContacts ?? 0), 0);
 
   // The tags[] array repeats every location already on a campaign, and tripled
@@ -642,6 +666,17 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
       c.locations.map((l) => (l.group === null || l.group === undefined ? 'delete' : 'merge')),
     ),
   );
+  const planGroup =
+    report.plannedDeletions === 0
+      ? ''
+      : `<div class="group" role="group" aria-label="Campaign plan">
+      <span class="glabel">Campaign plan</span>
+      <div class="chips">
+        ${chip('Being deleted', 'data-plan', 'deleting')}
+        ${chip('Keeping', 'data-plan', 'keeping')}
+      </div>
+    </div>`;
+
   const changeGroup =
     changes.size < 2
       ? ''
@@ -674,6 +709,11 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
   </div>
   <div class="cards">
     ${stat(report.campaigns.length, 'campaigns affected')}
+    ${
+      report.plannedDeletions === 0
+        ? ''
+        : stat(needAttention, 'once deletions are done', 'live')
+    }
     ${stat(live.length, 'of them live', 'live')}
     ${stat(liveContacts.toLocaleString(), 'contacts in live campaigns', 'live')}
     ${stat(locations.toLocaleString(), 'affected locations')}
@@ -707,6 +747,7 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
       </div>
     </div>
     ${changeGroup}
+    ${planGroup}
     <button class="reset hidden" id="reset" type="button">Reset filters</button>
   </div>
   <select id="sort" aria-label="Sort">

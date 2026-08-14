@@ -19,6 +19,7 @@ const campaign = (over: Partial<CampaignImpact> = {}): CampaignImpact => ({
   campaignId: '16',
   campaignName: 'Welcome',
   status: 'live',
+  plannedDeletion: false,
   activeContacts: 88,
   publishedDate: '8/5/2026 11:32 AM',
   locations: [location()],
@@ -32,6 +33,7 @@ const report = (over: Partial<TagImpactReport> = {}): TagImpactReport => ({
   tags: [{ tagId: '646', tagName: 'Bought', group: null, locations: [location()], campaignCount: 1 }],
   campaigns: [campaign()],
   noCampaignReferences: [],
+  plannedDeletions: 0,
   warnings: [],
   ...over,
 });
@@ -137,6 +139,24 @@ describe('renderTagImpactHtml', () => {
     // One option filters nothing.
     const page = renderTagImpactHtml(report({ campaigns: [campaign()] }));
     expect(page).not.toContain('data-change=');
+  });
+
+  it('offers a campaign-plan filter once a deletion list is in play', () => {
+    const page = renderTagImpactHtml(
+      report({
+        campaigns: [campaign({ plannedDeletion: true }), campaign({ campaignId: '17' })],
+        plannedDeletions: 1,
+      }),
+    );
+    expect(page).toContain('Campaign plan');
+    expect(page).toContain('data-plan="deleting"');
+    expect(page).toContain('once deletions are done');
+  });
+
+  it('omits that filter when no campaign is being deleted', () => {
+    const page = renderTagImpactHtml(report());
+    expect(page).not.toContain('data-plan=');
+    expect(page).not.toContain('once deletions are done');
   });
 
   it('offers a way back out of a filtered state', () => {

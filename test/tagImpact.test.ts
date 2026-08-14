@@ -343,3 +343,45 @@ describe('campaign status', () => {
     );
   });
 });
+
+describe('campaigns the operator plans to delete', () => {
+  const campaignWith = (funnelId: string) =>
+    makeCampaign({ funnelId, published: true, goals: [tagGoal('4', ['646'], 'Signed up')] });
+
+  const run = (deleting: string[]) => {
+    const a = campaignWith('16');
+    const b = campaignWith('17');
+    return analyzeTagImpact(
+      'x',
+      list([{ id: '646', name: 'Bought' }]),
+      [a, b],
+      buildGraph([a, b]),
+      [],
+      deleting,
+    );
+  };
+
+  it('marks an affected campaign that is itself being deleted', () => {
+    const report = run(['16']);
+    const marked = report.campaigns.filter((c) => c.plannedDeletion).map((c) => c.campaignId);
+    expect(marked).toEqual(['16']);
+    expect(report.plannedDeletions).toBe(1);
+  });
+
+  it('marks nothing when no list is supplied', () => {
+    const report = run([]);
+    expect(report.campaigns.every((c) => !c.plannedDeletion)).toBe(true);
+    expect(report.plannedDeletions).toBe(0);
+  });
+
+  it('still reports the campaign, because deletion is a plan and not a fact', () => {
+    // Hiding it would make the report disagree with the account as it stands.
+    expect(run(['16']).campaigns.map((c) => c.campaignId).sort()).toEqual(['16', '17']);
+  });
+
+  it('warns about an id that is not in the account, which is usually a typo', () => {
+    const report = run(['99999']);
+    expect(report.warnings.some((w) => /99999.*not in this account/i.test(w))).toBe(true);
+    expect(report.plannedDeletions).toBe(0);
+  });
+});

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { type DeletionList, parseDeletionList } from '../analyze/deletionList.js';
 import { analyzeTagImpact } from '../analyze/tagImpact.js';
 import { type TagList, formatFor, parseTagList } from '../analyze/tagList.js';
 import { normalizeAppName } from '../app.js';
@@ -24,8 +25,12 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const rawApp = argAfter(argv, '--app');
   const tagsPath = argAfter(argv, '--tags');
+  const deletingPath = argAfter(argv, '--deleting');
   if (rawApp === undefined || tagsPath === undefined) {
-    fail('Usage: npm run tag-impact -- --app <appName> --tags <list.csv|list.json>');
+    fail(
+      'Usage: npm run tag-impact -- --app <appName> --tags <list.csv|list.json> ' +
+        '[--deleting <campaigns.csv|campaigns.json>]',
+    );
     return;
   }
 
@@ -59,6 +64,24 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Campaigns the operator intends to delete. Optional: without it nothing is
+  // marked, which is the same as today's behaviour.
+  let deletions: DeletionList = { campaigns: [], warnings: [] };
+  if (deletingPath !== undefined) {
+    if (!existsSync(deletingPath)) {
+      fail(`No campaign deletion list at ${deletingPath}`);
+      return;
+    }
+    try {
+      deletions = parseDeletionList(await readFile(deletingPath, 'utf8'), formatFor(deletingPath));
+    } catch (error) {
+      fail(
+        `could not read the campaign deletion list — ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+  }
+
   // An empty report would read as "nothing is affected", which is a different
   // claim from "the list was empty".
   if (list.tags.length === 0) {
@@ -86,7 +109,15 @@ async function main(): Promise<void> {
     console.warn(`\n  no campaign list at ${listPath} — every status will read "unknown"`);
   }
 
-  const report = analyzeTagImpact(app, list, campaigns, graph, summaries);
+  const report = analyzeTagImpact(
+    app,
+    list,
+    campaigns,
+    graph,
+    summaries,
+    deletions.campaigns.map((c) => c.campaignId),
+  );
+  report.warnings.unshift(...deletions.warnings);
   const jsonPath = join('artifacts', app, 'tag-impact.json');
   const mdPath = join('artifacts', app, 'tag-impact.md');
   const htmlPath = join('artifacts', app, 'tag-impact.html');
@@ -111,6 +142,15 @@ async function main(): Promise<void> {
   }
   const statusLine = [...statuses.entries()].map(([s, n]) => `${n} ${s}`).join(', ');
   console.log(`    by status: ${statusLine}`);
+  if (deletingPath !== undefined) {
+    console.log(
+      `    ${deletions.campaigns.length} campaigns on the deletion list; ` +
+        `${report.plannedDeletions} of them are affected`,
+    );
+    console.log(
+      `    still affected once those are deleted: ${report.campaigns.length - report.plannedDeletions}`,
+    );
+  }
   console.log(
     `  locations: ${locations} — ${kinds.trigger} trigger, ${kinds.decision} decision, ${kinds.step} step`,
   );

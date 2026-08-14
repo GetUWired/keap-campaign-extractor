@@ -65,6 +65,8 @@ export interface CampaignImpact {
   campaignId: string;
   campaignName: string | null;
   status: CampaignStatus;
+  /** On the operator's list of campaigns to delete, so its breakage is moot. */
+  plannedDeletion: boolean;
   /** From the campaign list: how many contacts are sitting in it right now. */
   activeContacts: number | null;
   /** Verbatim as the list rendered it, e.g. "8/5/2026 11:32 AM". */
@@ -81,6 +83,8 @@ export interface TagImpactReport {
   campaigns: CampaignImpact[];
   /** Requested tags no campaign references. NOT the same as "safe to delete". */
   noCampaignReferences: { tagId: string; tagName: string }[];
+  /** How many affected campaigns are themselves slated for deletion. */
+  plannedDeletions: number;
   warnings: string[];
 }
 
@@ -163,11 +167,25 @@ export function analyzeTagImpact(
   graph: AccountGraph,
   /** The campaign list, for status. Absent means every status reads `unknown`. */
   summaries: CampaignSummary[] = [],
+  /** Campaign ids the operator intends to delete. Absent means none are. */
+  plannedDeletions: string[] = [],
 ): TagImpactReport {
   const warnings = [...list.warnings];
   const requested = new Map<string, RequestedTag>(list.tags.map((t) => [t.id, t]));
   const byId = new Map(campaigns.map((c) => [c.funnelId ?? '', c]));
   const summaryById = new Map(summaries.map((s) => [s.funnelId, s]));
+  const deleting = new Set(plannedDeletions);
+
+  // A campaign id on the deletion list that does not exist in the account is
+  // almost always a typo, and silently matching nothing would read as "that one
+  // is fine".
+  for (const campaignId of deleting) {
+    if (!byId.has(campaignId)) {
+      warnings.push(
+        `campaign ${campaignId} is on the deletion list but is not in this account's extract`,
+      );
+    }
+  }
 
   const byTag = new Map<string, ImpactLocation[]>();
   const byCampaign = new Map<string, ImpactLocation[]>();
@@ -244,6 +262,7 @@ export function analyzeTagImpact(
         campaignId,
         campaignName: locations[0]?.campaignName ?? null,
         status: campaign === undefined ? 'unknown' : campaignStatus(campaign, summary),
+        plannedDeletion: deleting.has(campaignId),
         activeContacts: summary?.activeContacts ?? null,
         publishedDate: summary?.publishedDate ?? null,
         locations,
@@ -267,6 +286,7 @@ export function analyzeTagImpact(
     noCampaignReferences: tags
       .filter((t) => t.locations.length === 0)
       .map((t) => ({ tagId: t.tagId, tagName: t.tagName })),
+    plannedDeletions: campaignImpacts.filter((c) => c.plannedDeletion).length,
     warnings,
   };
 }

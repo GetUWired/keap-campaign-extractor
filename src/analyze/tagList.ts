@@ -31,7 +31,7 @@ export function formatFor(path: string): 'csv' | 'json' {
  * quotes — "List: Minus TSP, Essence, 2024 trip purchased" is one — so quoting
  * has to be honored, but that is twenty lines, not a package.
  */
-function parseCsvRows(text: string): string[][] {
+export function parseCsvRows(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';

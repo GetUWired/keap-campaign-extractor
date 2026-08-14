@@ -23,6 +23,7 @@ const campaign = (over: Partial<CampaignImpact> = {}): CampaignImpact => ({
   campaignId: '16',
   campaignName: 'Welcome',
   status: 'live',
+  plannedDeletion: false,
   activeContacts: null,
   publishedDate: null,
   locations: [location()],
@@ -36,6 +37,7 @@ const report = (over: Partial<TagImpactReport> = {}): TagImpactReport => ({
   tags: [],
   campaigns: [],
   noCampaignReferences: [],
+  plannedDeletions: 0,
   warnings: [],
   ...over,
 });
@@ -183,5 +185,23 @@ describe('what change each tag is undergoing', () => {
     );
     expect(page).toContain('[merge]');
     expect(page).not.toContain('merge → merge');
+  });
+});
+
+describe('campaigns being deleted', () => {
+  it('says so on the campaign, and splits the summary', () => {
+    const page = renderTagImpact(
+      report({
+        campaigns: [campaign({ plannedDeletion: true }), campaign({ campaignId: '17' })],
+        plannedDeletions: 1,
+      }),
+    );
+    expect(page).toContain('on the campaign deletion list');
+    expect(page).toMatch(/themselves being deleted \| 1/);
+    expect(page).toMatch(/still affected afterwards \| 1/);
+  });
+
+  it('leaves the summary alone when nothing is being deleted', () => {
+    expect(renderTagImpact(report())).not.toContain('themselves being deleted');
   });
 });
