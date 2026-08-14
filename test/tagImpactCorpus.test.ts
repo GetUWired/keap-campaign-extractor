@@ -4,12 +4,14 @@ import { analyzeTagImpact } from '../src/analyze/tagImpact.js';
 import { parseTagList } from '../src/analyze/tagList.js';
 import type { NormalizedCampaign } from '../src/normalize/campaign.js';
 import type { AccountGraph } from '../src/normalize/graph.js';
+import type { CampaignSummary } from '../src/parse/campaignList.js';
 import { renderTagImpact } from '../src/render/tagImpactDoc.js';
 
 // artifacts/ is gitignored, so this runs only where the corpus exists.
 const DIR = new URL('../artifacts/se232/normalized/', import.meta.url);
 const GRAPH = new URL('../artifacts/se232/graph.json', import.meta.url);
-const present = existsSync(DIR) && existsSync(GRAPH);
+const LIST = new URL('../artifacts/se232/campaigns.json', import.meta.url);
+const present = existsSync(DIR) && existsSync(GRAPH) && existsSync(LIST);
 
 const graph = present
   ? (JSON.parse(readFileSync(GRAPH, 'utf8')) as AccountGraph)
@@ -19,6 +21,10 @@ const campaigns = present
   ? readdirSync(DIR)
       .filter((f) => /^\d+\.json$/.test(f))
       .map((f) => JSON.parse(readFileSync(new URL(f, DIR), 'utf8')) as NormalizedCampaign)
+  : [];
+
+const summaries: CampaignSummary[] = present
+  ? (JSON.parse(readFileSync(LIST, 'utf8')) as { campaigns: CampaignSummary[] }).campaigns
   : [];
 
 describe.skipIf(!present)('tag impact against the real se232 corpus', () => {
@@ -46,6 +52,13 @@ describe.skipIf(!present)('tag impact against the real se232 corpus', () => {
       .flatMap((c) => c.locations)
       .filter((l) => l.kind === 'decision');
     expect(decisions.every((d) => d.nodeName || d.after)).toBe(true);
+  });
+
+  it('gives every affected campaign a status the campaign list can support', () => {
+    const list = parseTagList('id,name\n13269,Nurture\n', 'csv');
+    const report = analyzeTagImpact('se232', list, campaigns, graph, summaries);
+    expect(report.campaigns.every((c) => c.status !== 'unknown')).toBe(true);
+    expect(report.campaigns.filter((c) => c.status === 'live').length).toBeGreaterThan(0);
   });
 
   it('renders the whole thing without the word "safe"', () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { ImpactLocation, TagImpactReport } from '../src/analyze/tagImpact.js';
+import type {
+  CampaignImpact,
+  ImpactLocation,
+  TagImpactReport,
+} from '../src/analyze/tagImpact.js';
 import { renderTagImpact } from '../src/render/tagImpactDoc.js';
 
 const location = (over: Partial<ImpactLocation> = {}): ImpactLocation => ({
@@ -12,6 +16,17 @@ const location = (over: Partial<ImpactLocation> = {}): ImpactLocation => ({
   edgeKind: 'listens-for',
   cellId: '4',
   nodeName: 'Signed up',
+  ...over,
+});
+
+const campaign = (over: Partial<CampaignImpact> = {}): CampaignImpact => ({
+  campaignId: '16',
+  campaignName: 'Welcome',
+  status: 'live',
+  activeContacts: null,
+  publishedDate: null,
+  locations: [location()],
+  duplicatedGroups: [],
   ...over,
 });
 
@@ -48,7 +63,7 @@ describe('renderTagImpact', () => {
 
   it('describes a trigger location by its goal', () => {
     const page = renderTagImpact(
-      report({ campaigns: [{ campaignId: '16', campaignName: 'Welcome', locations: [location()], duplicatedGroups: [] }] }),
+      report({ campaigns: [campaign()] }),
     );
     expect(page).toMatch(/Trigger/);
     expect(page).toContain('Signed up');
@@ -63,7 +78,7 @@ describe('renderTagImpact', () => {
       nodeName: null,
     });
     const page = renderTagImpact(
-      report({ campaigns: [{ campaignId: '16', campaignName: 'Welcome', locations: [step], duplicatedGroups: [] }] }),
+      report({ campaigns: [campaign({ locations: [step] })] }),
     );
     expect(page).toContain('Onboarding');
     expect(page).toContain('step 2');
@@ -73,14 +88,7 @@ describe('renderTagImpact', () => {
   it('reports a campaign that references two tags from one group', () => {
     const page = renderTagImpact(
       report({
-        campaigns: [
-          {
-            campaignId: '16',
-            campaignName: 'Welcome',
-            locations: [location()],
-            duplicatedGroups: [{ group: 'newsletter', tagIds: ['646', '647'] }],
-          },
-        ],
+        campaigns: [campaign({ duplicatedGroups: [{ group: 'newsletter', tagIds: ['646', '647'] }] })],
       }),
     );
     expect(page).toContain('newsletter');
@@ -97,5 +105,55 @@ describe('renderTagImpact', () => {
     );
     const row = page.split('\n').find((l) => l.startsWith('| 1 |')) ?? '';
     expect(row).toContain('A \\| B');
+  });
+});
+
+describe('campaign status in the page', () => {
+  it('labels a live campaign and says who is in it', () => {
+    const page = renderTagImpact(
+      report({
+        campaigns: [
+          campaign({ status: 'live', activeContacts: 88, publishedDate: '8/5/2026 11:32 AM' }),
+        ],
+      }),
+    );
+    expect(page).toContain('**Live**');
+    expect(page).toContain('88 active contacts');
+    expect(page).toContain('8/5/2026 11:32 AM');
+  });
+
+  it('distinguishes stopped from never published', () => {
+    const page = renderTagImpact(
+      report({
+        campaigns: [
+          campaign({ campaignId: '16', status: 'stopped' }),
+          campaign({ campaignId: '17', status: 'never-published' }),
+        ],
+      }),
+    );
+    expect(page).toContain('Published, then stopped');
+    expect(page).toContain('Never published');
+  });
+
+  it('says the status is unknown rather than implying it is fine', () => {
+    const page = renderTagImpact(report({ campaigns: [campaign({ status: 'unknown' })] }));
+    expect(page).toContain('Status unknown');
+  });
+
+  it('breaks the affected campaigns down by status', () => {
+    const page = renderTagImpact(
+      report({
+        campaigns: [
+          campaign({ campaignId: '16', status: 'live', activeContacts: 88 }),
+          campaign({ campaignId: '17', status: 'never-published' }),
+        ],
+      }),
+    );
+    expect(page).toContain('Affected campaigns by status');
+    expect(page).toMatch(/\| Live \| 1 \| 1 \| 88 \|/);
+  });
+
+  it('omits the breakdown when nothing is affected', () => {
+    expect(renderTagImpact(report())).not.toContain('by status');
   });
 });

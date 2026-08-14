@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeTagImpact } from '../src/analyze/tagImpact.js';
+import type { NormalizedCampaign } from '../src/normalize/campaign.js';
+import type { CampaignSummary } from '../src/parse/campaignList.js';
 import { buildGraph } from '../src/normalize/graph.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
@@ -266,5 +268,78 @@ describe('naming an unnamed decision', () => {
 
   it('leaves it unset when nothing named feeds the decision', () => {
     expect(decisionIn(withEdges([]))?.after).toBeUndefined();
+  });
+});
+
+describe('campaign status', () => {
+  // §14: publishXml answers "ever published", the campaign list answers "live
+  // now". They disagree about 125 of se232's campaigns.
+  const summary = (over: Partial<CampaignSummary> = {}): CampaignSummary => ({
+    funnelId: '16',
+    name: 'Welcome',
+    categories: [],
+    activeContacts: null,
+    publishedDate: null,
+    publishedBy: null,
+    published: false,
+    ...over,
+  });
+
+  const affected = (campaign: NormalizedCampaign, summaries: CampaignSummary[]) =>
+    analyzeTagImpact(
+      'x',
+      list([{ id: '646', name: 'Bought' }]),
+      [campaign],
+      buildGraph([campaign]),
+      summaries,
+    ).campaigns[0];
+
+  const campaign = (published: boolean) =>
+    makeCampaign({ funnelId: '16', published, goals: [tagGoal('4', ['646'], 'Signed up')] });
+
+  it('is live when the campaign list carries a published date', () => {
+    const one = affected(campaign(true), [
+      summary({ published: true, publishedDate: '8/5/2026 11:32 AM', activeContacts: 88 }),
+    ]);
+    expect(one?.status).toBe('live');
+    expect(one?.activeContacts).toBe(88);
+    expect(one?.publishedDate).toBe('8/5/2026 11:32 AM');
+  });
+
+  it('is stopped when it was published but the list shows no date', () => {
+    expect(affected(campaign(true), [summary()])?.status).toBe('stopped');
+  });
+
+  it('is never-published when neither signal is present', () => {
+    expect(affected(campaign(false), [summary()])?.status).toBe('never-published');
+  });
+
+  it('is unknown when no campaign list was supplied', () => {
+    // An absent answer, not a reassuring one.
+    expect(affected(campaign(true), [])?.status).toBe('unknown');
+  });
+
+  it('puts live campaigns first, ahead of bigger never-published ones', () => {
+    const live = makeCampaign({
+      funnelId: '16',
+      published: true,
+      goals: [tagGoal('4', ['646'], 'Signed up')],
+    });
+    const dead = makeCampaign({
+      funnelId: '17',
+      published: false,
+      goals: [tagGoal('4', ['646'], 'A'), tagGoal('5', ['646'], 'B')],
+    });
+    const report = analyzeTagImpact(
+      'x',
+      list([{ id: '646', name: 'Bought' }]),
+      [live, dead],
+      buildGraph([live, dead]),
+      [summary({ funnelId: '16', published: true }), summary({ funnelId: '17' })],
+    );
+    expect(report.campaigns.map((c) => c.campaignId)).toEqual(['16', '17']);
+    expect(report.campaigns[1]?.locations.length).toBeGreaterThan(
+      report.campaigns[0]?.locations.length ?? 0,
+    );
   });
 });

@@ -1,8 +1,38 @@
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { AccountGraph } from '../normalize/graph.js';
+import type { CampaignSummary } from '../parse/campaignList.js';
 import type { RequestedTag, TagList } from './tagList.js';
 
 export type LocationKind = 'trigger' | 'step' | 'decision';
+
+/**
+ * Where a campaign stands, per §14's two signals.
+ *
+ * `publishXml` answers *has this ever been published*; the campaign list's
+ * Published Date answers *is it live now*. On se232 they disagree about 125
+ * campaigns, so collapsing them to one boolean would report a third of the
+ * account's dead campaigns as running.
+ *
+ * `unknown` means the campaign list was not supplied — an absent answer, not a
+ * fourth state.
+ */
+export type CampaignStatus = 'live' | 'stopped' | 'never-published' | 'unknown';
+
+export const STATUS_RANK: Record<CampaignStatus, number> = {
+  live: 0,
+  stopped: 1,
+  'never-published': 2,
+  unknown: 3,
+};
+
+export function campaignStatus(
+  campaign: NormalizedCampaign,
+  summary: CampaignSummary | undefined,
+): CampaignStatus {
+  if (summary === undefined) return 'unknown';
+  if (summary.published) return 'live';
+  return campaign.published ? 'stopped' : 'never-published';
+}
 
 export interface ImpactLocation {
   campaignId: string;
@@ -34,6 +64,11 @@ export interface TagImpact {
 export interface CampaignImpact {
   campaignId: string;
   campaignName: string | null;
+  status: CampaignStatus;
+  /** From the campaign list: how many contacts are sitting in it right now. */
+  activeContacts: number | null;
+  /** Verbatim as the list rendered it, e.g. "8/5/2026 11:32 AM". */
+  publishedDate: string | null;
   locations: ImpactLocation[];
   /** Tags from one combine group that this campaign references more than one of. */
   duplicatedGroups: { group: string; tagIds: string[] }[];
@@ -126,10 +161,13 @@ export function analyzeTagImpact(
   list: TagList,
   campaigns: NormalizedCampaign[],
   graph: AccountGraph,
+  /** The campaign list, for status. Absent means every status reads `unknown`. */
+  summaries: CampaignSummary[] = [],
 ): TagImpactReport {
   const warnings = [...list.warnings];
   const requested = new Map<string, RequestedTag>(list.tags.map((t) => [t.id, t]));
   const byId = new Map(campaigns.map((c) => [c.funnelId ?? '', c]));
+  const summaryById = new Map(summaries.map((s) => [s.funnelId, s]));
 
   const byTag = new Map<string, ImpactLocation[]>();
   const byCampaign = new Map<string, ImpactLocation[]>();
@@ -200,16 +238,26 @@ export function analyzeTagImpact(
         if (location.group === null) continue;
         groups.set(location.group, (groups.get(location.group) ?? new Set()).add(location.tagId));
       }
+      const campaign = byId.get(campaignId);
+      const summary = summaryById.get(campaignId);
       return {
         campaignId,
         campaignName: locations[0]?.campaignName ?? null,
+        status: campaign === undefined ? 'unknown' : campaignStatus(campaign, summary),
+        activeContacts: summary?.activeContacts ?? null,
+        publishedDate: summary?.publishedDate ?? null,
         locations,
         duplicatedGroups: [...groups.entries()]
           .filter(([, ids]) => ids.size > 1)
           .map(([group, ids]) => ({ group, tagIds: [...ids].sort() })),
       };
     })
-    .sort((a, b) => b.locations.length - a.locations.length);
+    // Live campaigns first: a running campaign losing a trigger is a different
+    // problem from a never-published one, whatever the location count says.
+    .sort(
+      (a, b) =>
+        STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.locations.length - a.locations.length,
+    );
 
   return {
     appName,

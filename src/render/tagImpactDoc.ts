@@ -1,5 +1,20 @@
-import type { ImpactLocation, TagImpactReport } from '../analyze/tagImpact.js';
+import type {
+  CampaignImpact,
+  CampaignStatus,
+  ImpactLocation,
+  TagImpactReport,
+} from '../analyze/tagImpact.js';
 import { plainText } from './text.js';
+
+/** The three states of §14, plus the absence of an answer. */
+const STATUS_LABEL: Record<CampaignStatus, string> = {
+  live: 'Live',
+  stopped: 'Published, then stopped',
+  'never-published': 'Never published',
+  unknown: 'Status unknown',
+};
+
+const STATUS_ORDER: CampaignStatus[] = ['live', 'stopped', 'never-published', 'unknown'];
 
 /**
  * The caveat that must travel with every one of these numbers.
@@ -43,6 +58,20 @@ function describeLocation(location: ImpactLocation): string {
   return `**Sequence** — ${sequence}${position} ${verb} ${tag}`;
 }
 
+/** The status line under a campaign heading: what it is, and who is in it. */
+function describeStatus(campaign: CampaignImpact): string {
+  const parts = [`**${STATUS_LABEL[campaign.status]}**`];
+  if (campaign.status === 'live' && campaign.publishedDate !== null) {
+    parts.push(`published ${cell(campaign.publishedDate)}`);
+  }
+  if (campaign.activeContacts !== null) {
+    const contacts = campaign.activeContacts;
+    parts.push(`${contacts} active contact${contacts === 1 ? '' : 's'}`);
+  }
+  parts.push(`${campaign.locations.length} affected location(s)`);
+  return parts.join(' · ');
+}
+
 export function renderTagImpact(report: TagImpactReport): string {
   const lines: string[] = [
     `# Tag Impact Analysis — ${report.appName}`,
@@ -65,15 +94,40 @@ export function renderTagImpact(report: TagImpactReport): string {
   lines.push(`| Affected locations | ${locations} |`);
   lines.push('');
 
+  // A live campaign losing an entry point is the finding; a never-published one
+  // losing the same entry point is housekeeping. The split says which is which.
+  const byStatus = STATUS_ORDER.map((status) => ({
+    status,
+    campaigns: report.campaigns.filter((c) => c.status === status),
+  })).filter((row) => row.campaigns.length > 0);
+
+  if (byStatus.length > 0) {
+    lines.push('### Affected campaigns by status', '');
+    lines.push('| Status | Campaigns | Locations | Active contacts |', '|---|---|---|---|');
+    for (const row of byStatus) {
+      const rowLocations = row.campaigns.reduce((n, c) => n + c.locations.length, 0);
+      const contacts = row.campaigns.reduce((n, c) => n + (c.activeContacts ?? 0), 0);
+      lines.push(
+        `| ${STATUS_LABEL[row.status]} | ${row.campaigns.length} | ${rowLocations} | ${contacts} |`,
+      );
+    }
+    lines.push('');
+  }
+
   if (report.campaigns.length > 0) {
-    lines.push('## Affected campaigns', '', 'Ordered by number of affected locations.', '');
+    lines.push(
+      '## Affected campaigns',
+      '',
+      'Live campaigns first, then by number of affected locations.',
+      '',
+    );
     for (const campaign of report.campaigns) {
       const name =
         campaign.campaignName === null
           ? `Campaign ${campaign.campaignId}`
           : cell(campaign.campaignName);
       lines.push(`### ${name} (${campaign.campaignId})`, '');
-      lines.push(`_${campaign.locations.length} affected location(s)_`, '');
+      lines.push(describeStatus(campaign), '');
       for (const group of campaign.duplicatedGroups) {
         lines.push(
           `> References ${group.tagIds.length} tags from combine group **${cell(group.group)}** ` +

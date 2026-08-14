@@ -6,6 +6,7 @@ import { type TagList, formatFor, parseTagList } from '../analyze/tagList.js';
 import { normalizeAppName } from '../app.js';
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { AccountGraph } from '../normalize/graph.js';
+import type { CampaignSummary } from '../parse/campaignList.js';
 import { renderTagImpact } from '../render/tagImpactDoc.js';
 
 function fail(message: string): void {
@@ -72,7 +73,19 @@ async function main(): Promise<void> {
     campaigns.push(JSON.parse(raw) as NormalizedCampaign);
   }
 
-  const report = analyzeTagImpact(app, list, campaigns, graph);
+  // The campaign list is what separates "live" from "published, then stopped".
+  // Without it every status reads `unknown`, which the report says out loud
+  // rather than defaulting to something reassuring.
+  const listPath = join('artifacts', app, 'campaigns.json');
+  let summaries: CampaignSummary[] = [];
+  if (existsSync(listPath)) {
+    const parsed = JSON.parse(await readFile(listPath, 'utf8')) as { campaigns: CampaignSummary[] };
+    summaries = parsed.campaigns ?? [];
+  } else {
+    console.warn(`\n  no campaign list at ${listPath} — every status will read "unknown"`);
+  }
+
+  const report = analyzeTagImpact(app, list, campaigns, graph, summaries);
   const jsonPath = join('artifacts', app, 'tag-impact.json');
   const mdPath = join('artifacts', app, 'tag-impact.md');
   await writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf8');
@@ -89,6 +102,12 @@ async function main(): Promise<void> {
   console.log(`  referenced by a campaign: ${referenced}`);
   console.log(`  no campaign references:   ${report.noCampaignReferences.length}`);
   console.log(`  campaigns affected:       ${report.campaigns.length} of ${campaigns.length}`);
+  const statuses = new Map<string, number>();
+  for (const campaign of report.campaigns) {
+    statuses.set(campaign.status, (statuses.get(campaign.status) ?? 0) + 1);
+  }
+  const statusLine = [...statuses.entries()].map(([s, n]) => `${n} ${s}`).join(', ');
+  console.log(`    by status: ${statusLine}`);
   console.log(
     `  locations: ${locations} — ${kinds.trigger} trigger, ${kinds.decision} decision, ${kinds.step} step`,
   );
