@@ -103,6 +103,24 @@ describe('renderTagImpactHtml', () => {
     expect(page).toContain("'tag:' + row.tagId");
   });
 
+  it('keeps status and location-kind filters in separate labelled groups', () => {
+    // Read as one row of seven chips, nobody could tell the two sets apart.
+    const page = renderTagImpactHtml(report());
+    const groups = [...page.matchAll(/<div class="group"[\s\S]*?<\/div>\s*<\/div>/g)].map((m) => m[0]);
+    expect(groups).toHaveLength(2);
+
+    const statusGroup = groups.find((g) => g.includes('data-status')) ?? '';
+    const kindGroup = groups.find((g) => g.includes('data-kind')) ?? '';
+    expect(statusGroup).toContain('Campaign status');
+    expect(statusGroup).not.toContain('data-kind');
+    expect(kindGroup).toContain('Tag used as');
+    expect(kindGroup).not.toContain('data-status');
+  });
+
+  it('offers a way back out of a filtered state', () => {
+    expect(renderTagImpactHtml(report())).toContain('id="reset"');
+  });
+
   it('leads with how many affected campaigns are live', () => {
     const page = renderTagImpactHtml(
       report({

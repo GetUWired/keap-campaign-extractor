@@ -129,6 +129,27 @@ select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; b
 }
 .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); font-weight: 600; }
 .chip.live[aria-pressed="true"] { border-color: var(--live); color: var(--live); }
+/* The two chip sets answer different questions and were read as one row. */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; width: 100%; }
+.group {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+}
+.glabel {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); white-space: nowrap; padding-right: 2px;
+  border-right: 1px solid var(--line); margin-right: 2px; padding-right: 10px;
+}
+.group .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reset {
+  border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px;
+  cursor: pointer; text-decoration: underline; align-self: center; padding: 0 4px;
+}
+@media (max-width: 640px) {
+  .group { width: 100%; align-items: flex-start; flex-direction: column; gap: 6px; }
+  .glabel { border-right: 0; border-bottom: 1px solid var(--line); width: 100%; padding: 0 0 5px; margin: 0; }
+}
 .count { color: var(--muted); font-size: 13px; padding: 10px 0; }
 .count b { color: var(--ink); }
 details.campaign {
@@ -397,7 +418,13 @@ function render() {
       ' live) · ' + locations.toLocaleString() + ' locations',
     );
     if (rows.length === 0) {
-      campaignsView.append(el('div', 'empty', 'Nothing matches those filters.'));
+      const why =
+        state.statuses.size === 0
+          ? 'No campaign status is selected.'
+          : state.kinds.size === 0
+            ? 'No location type is selected — pick at least one of Trigger, Decision or Sequence step.'
+            : 'Nothing matches those filters.';
+      campaignsView.append(el('div', 'empty', why));
       return;
     }
     const frag = document.createDocumentFragment();
@@ -409,6 +436,13 @@ function render() {
   const rows = tagRows();
   const body = tagsView.querySelector('tbody');
   body.replaceChildren();
+  if (rows.length === 0 && state.kinds.size === 0) {
+    const cell = el('td', null, 'No location type is selected.');
+    cell.colSpan = 8;
+    const tr = el('tr');
+    tr.append(cell);
+    body.append(tr);
+  }
   countLine.replaceChildren();
   countLine.append('Showing ', el('b', null, String(rows.length)), ' referenced tags');
   const q = parseQuery(state.q).text;
@@ -452,18 +486,46 @@ function setView(view) {
 
 document.getElementById('q').addEventListener('input', (event) => {
   state.q = event.target.value;
+  document.getElementById('reset').classList.toggle('hidden', !isFiltered());
   render();
 });
+const ALL_STATUSES = ['live', 'stopped', 'never-published', 'unknown'];
+const ALL_KINDS = ['trigger', 'decision', 'step'];
+
+/** Whether anything is narrowed, which is what the reset link is for. */
+const isFiltered = () =>
+  state.q.trim() !== '' ||
+  state.statuses.size !== ALL_STATUSES.length ||
+  state.kinds.size !== ALL_KINDS.length;
+
+function syncChips() {
+  for (const chip of document.querySelectorAll('.chip')) {
+    const set = chip.dataset.status ? state.statuses : state.kinds;
+    const key = chip.dataset.status ?? chip.dataset.kind;
+    chip.setAttribute('aria-pressed', String(set.has(key)));
+  }
+  document.getElementById('reset').classList.toggle('hidden', !isFiltered());
+}
+
 for (const chip of document.querySelectorAll('.chip')) {
   chip.addEventListener('click', () => {
     const set = chip.dataset.status ? state.statuses : state.kinds;
     const key = chip.dataset.status ?? chip.dataset.kind;
     if (set.has(key)) set.delete(key);
     else set.add(key);
-    chip.setAttribute('aria-pressed', String(set.has(key)));
+    syncChips();
     render();
   });
 }
+
+document.getElementById('reset').addEventListener('click', () => {
+  state.q = '';
+  document.getElementById('q').value = '';
+  state.statuses = new Set(ALL_STATUSES);
+  state.kinds = new Set(ALL_KINDS);
+  syncChips();
+  render();
+});
 document.getElementById('sort').addEventListener('change', (event) => {
   state.sort = event.target.value;
   render();
@@ -483,6 +545,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+syncChips();
 render();
 `;
 
@@ -541,13 +604,26 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
 
 <div class="toolbar">
   <input id="q" type="search" placeholder="Search campaign, tag, sequence or id …  (press /)" autocomplete="off">
-  ${chip('Live', 'data-status', 'live', 'live')}
-  ${chip('Stopped', 'data-status', 'stopped')}
-  ${chip('Never published', 'data-status', 'never-published')}
-  ${chip('Unknown', 'data-status', 'unknown')}
-  ${chip('Triggers', 'data-kind', 'trigger')}
-  ${chip('Decisions', 'data-kind', 'decision')}
-  ${chip('Steps', 'data-kind', 'step')}
+  <div class="filters">
+    <div class="group" role="group" aria-label="Campaign status">
+      <span class="glabel">Campaign status</span>
+      <div class="chips">
+        ${chip('Live', 'data-status', 'live', 'live')}
+        ${chip('Stopped', 'data-status', 'stopped')}
+        ${chip('Never published', 'data-status', 'never-published')}
+        ${chip('Unknown', 'data-status', 'unknown')}
+      </div>
+    </div>
+    <div class="group" role="group" aria-label="Where the tag is used">
+      <span class="glabel">Tag used as</span>
+      <div class="chips">
+        ${chip('Trigger', 'data-kind', 'trigger')}
+        ${chip('Decision', 'data-kind', 'decision')}
+        ${chip('Sequence step', 'data-kind', 'step')}
+      </div>
+    </div>
+    <button class="reset hidden" id="reset" type="button">Reset filters</button>
+  </div>
   <select id="sort" aria-label="Sort">
     <option value="default">Live first</option>
     <option value="locations">Most locations</option>
