@@ -1101,6 +1101,20 @@ distinction matters because the output sits beside someone deleting tags in a li
 **229 of 398 campaigns are affected** — 58% of the account, from a list of tags nobody expected to
 be load-bearing.
 
+Each affected campaign carries its status, from §14's two signals rather than one boolean:
+
+| status | campaigns | locations | active contacts |
+|---|---|---|---|
+| live | 94 | 747 | **9,287** |
+| published, then stopped | 99 | 606 | 0 |
+| never published | 36 | 223 | 0 |
+
+The 94 live campaigns hold 9,287 contacts between them. That is the number to weigh a deletion
+against: not how many campaigns mention a tag, but how many people are standing inside the ones that
+are switched on. The 135 stopped and never-published campaigns hold nobody, and their 829 locations
+can be read as archaeology rather than risk — while still being places a merge would silently change
+behaviour if the campaign were ever switched back on.
+
 **Merges hit decisions six times harder than deletes** (446 against 73) while deletes hit steps
 nearly twice as hard (401 against 223). That asymmetry is the shape of the account, not an artifact:
 the tags being merged are the ones campaigns branch *on* — trip-completed markers, funnel stages —
@@ -1108,17 +1122,26 @@ while the tags being deleted are ones campaigns merely *set*. Merging two tags a
 separately collapses two branches into one; deleting a tag a step applies leaves a step that does
 nothing. The second is a dead limb, the first is a rerouted contact.
 
-### 20 campaigns would lose every entry point — 17 of them live
+### 20 campaigns would lose every entry point — 15 of them live
 
 The finding worth leading with. For 20 campaigns, *every* goal is a tag goal and *every* one of
 those tags is on the list. Delete them all and the campaign is not broken in a way anyone would
-notice: it simply never starts again. 17 are published and running; 3 were never published.
+notice: it simply never starts again.
 
-Campaign ids: 551, 7896, 8092, 8499, 8539, 11059, 11089, 11127, 11171, 11511, 11747, 11805, 11849,
-12089, 12227, 12787, 12795, 12797, 12823, 14836.
+| | count | ids |
+|---|---|---|
+| live | **15** | 551, 7896, 8092, 8499, 8539, 11059, 11089, 11127, 11171, 11511, 11747, 11849, 12089, 12823, 14836 |
+| published, then stopped | 2 | 11805, 12227 |
+| never published | 3 | 12787, 12795, 12797 |
 
-(An ad-hoc pass before the tool existed reported 22, all published. 20/17 is the recomputed figure,
-under the definition stated above; the campaign and location totals reproduce the ad-hoc run exactly.)
+All 15 live ones currently hold zero active contacts, so nothing is mid-flight in them today. That
+is a reason to schedule the work, not a reason to skip the check — they are switched on and waiting.
+
+(An ad-hoc pass before the tool existed reported 22, all published. The campaign and location totals
+reproduce that run exactly; this count is 20 under the definition stated above. The first version of
+this section said "17 published and running", which read `publishXml` — *ever* published — as
+though it meant live. §14 is explicit that it does not, and correcting it moves two campaigns from
+live to stopped.)
 
 ### 2,884 tags with no campaign references is not 2,884 tags to delete
 
