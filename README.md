@@ -242,9 +242,13 @@ JSON works too (`.json` extension):
 
 ### 7b. Run it
 
+
 ```bash
 npm run tag-impact -- --app se232 --tags ./tags.csv
 ```
+
+If you are also deleting campaigns, pass that list too — see
+[7c](#7c-campaigns-you-are-also-deleting).
 
 Output:
 
@@ -265,15 +269,54 @@ It writes three files to `artifacts/se232/`:
 | `tag-impact.md` | Same content as a document — good for pasting into a ticket. |
 | `tag-impact.json` | The data, for anything else you want to build. |
 
-### 7c. Read the HTML
+### 7c. Campaigns you are also deleting
+
+A campaign that is itself being deleted does not need its broken triggers investigated. Pass the list
+and the report separates the two:
+
+```bash
+npm run tag-impact -- --app se232 --tags ./tags.csv --deleting ./campaigns-to-delete.csv
+```
+
+```csv
+id,name
+11307,Cruises Abandon Cart
+12787,Old Welcome Series
+```
+
+`id` is required; `campaign_id`, `campaignId`, `funnel_id` and `funnelId` all work as the column
+name, so a Keap export needs no editing. `name` is optional. JSON works too — either
+`{"delete": [{"id": "11307"}]}` or a bare `["11307", "12787"]`.
+
+The run then reports both numbers:
+
+```
+campaigns affected:       229 of 398
+  41 campaigns on the deletion list; 40 of them are affected
+  still affected once those are deleted: 189
+```
+
+Those campaigns are **marked and filterable, not hidden** — struck through, tagged *campaign being
+deleted*, and excluded with one click via the **Campaign plan** filter. Deletion is a plan; until it
+happens the report should still agree with the account as it stands.
+
+An id on the list that is not in the account is reported as a warning rather than quietly matching
+nothing, because it is nearly always a typo.
+
+### 7d. Read the HTML
 
 Open `artifacts/se232/tag-impact.html` in any browser — double-click it, no server needed.
 
 - **The numbers across the top** lead with how many affected campaigns are **live** and how many
   contacts are inside them. That is the figure to weigh a deletion against — not the campaign count.
-- **Campaign status** filters live / stopped / never published.
-- **Tag used as** filters where the tag appears — trigger, decision, or sequence step. These are two
-  separate filter groups and narrow different things.
+The filters are separate labelled groups, and each narrows something different:
+
+- **Campaign status** — live / stopped / never published.
+- **Tag used as** — where the tag appears: trigger, decision, or sequence step.
+- **Tag change** — whether the tag is being deleted or merged. Only shown when the list has both.
+- **Campaign plan** — being deleted / keeping. Only shown when you passed `--deleting`.
+
+**Reset filters** appears once anything is narrowed.
 - **Search** matches campaign names, tag names, sequence names and ids. Press `/` to jump to it.
 - **`tag:13269`** matches that tag exactly. Plain `13269` also matches tag 17390 and friends, because
   ids substring-match.
@@ -281,9 +324,12 @@ Open `artifacts/se232/tag-impact.html` in any browser — double-click it, no se
 
 Each affected campaign expands to show every location, grouped by kind:
 
-> **Trigger** — goal "Mother's Day Cruise 2026" starts this campaign when `22527` … is applied
-> **Decision** — the decision after "Any purchase" (cell 1349) routes on `11454` …
-> **Sequence** — "Onboarding" step 2 applies `13269` …
+> **Trigger** — goal "Mother's Day Cruise 2026" starts this campaign when `22527` … `DELETE`
+> **Decision** — the decision after "Any purchase" (cell 1349) routes on `11454` … `MERGE`
+> **Sequence** — "Onboarding" step 2 applies `13269` … `DELETE`
+
+The badge on each line says what is happening to that tag — deleted outright, or merged into
+another. Where a list has several merge groups, the badge names the target group.
 
 ### What it will not tell you
 
