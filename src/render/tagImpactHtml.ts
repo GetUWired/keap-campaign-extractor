@@ -54,6 +54,10 @@ const STYLES = `
   --trigger: #b42318;
   --decision: #6941c6;
   --step: #0f766e;
+  --del: #8a4b00;
+  --del-bg: #fff4e5;
+  --mrg: #175cd3;
+  --mrg-bg: #eff6ff;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -72,6 +76,10 @@ const STYLES = `
     --trigger: #ff9b8f;
     --decision: #c3a6ff;
     --step: #5eead4;
+    --del: #f5b26b;
+    --del-bg: #33261a;
+    --mrg: #8ab4ff;
+    --mrg-bg: #1b2740;
   }
 }
 * { box-sizing: border-box; }
@@ -181,6 +189,12 @@ ul.locs { list-style: none; margin: 0; padding: 0; }
 ul.locs li { padding: 5px 0 5px 12px; border-left: 2px solid var(--line); font-size: 14px; }
 ul.locs li + li { margin-top: 2px; }
 .tag { font-weight: 600; }
+.badge {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
+}
+.badge.delete { color: var(--del); background: var(--del-bg); }
+.badge.merge { color: var(--mrg); background: var(--mrg-bg); }
 .tagid { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .where { color: var(--muted); }
 mark { background: #ffe58a; color: #000; border-radius: 2px; padding: 0 1px; }
@@ -210,8 +224,29 @@ const state = {
   q: '',
   statuses: new Set(['live', 'stopped', 'never-published', 'unknown']),
   kinds: new Set(['trigger', 'decision', 'step']),
+  changes: new Set(['delete', 'merge']),
   sort: 'default',
 };
+
+/**
+ * What is being done to this tag.
+ *
+ * The list's own distinction: a tag with no group is being deleted outright, a
+ * tag with one is being merged into the others sharing it.
+ */
+const changeOf = (loc) => (loc.group === null || loc.group === undefined ? 'delete' : 'merge');
+
+/**
+ * Whether merge-group names carry information.
+ *
+ * A list where every merged tag shares one group name says only "merging" —
+ * printing "merge to merge" on 700 rows is noise. With several groups the name
+ * is the whole point.
+ */
+const MERGE_GROUPS = new Set(
+  DATA.campaigns.flatMap((c) => c.locations.map((l) => l.group).filter((g) => g)),
+);
+const SHOW_GROUP = MERGE_GROUPS.size > 1;
 
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
@@ -277,7 +312,10 @@ function filtered() {
     const nameHit =
       !!q && ((campaign.campaignName ?? '').toLowerCase().includes(q) || campaign.campaignId.includes(q));
     const locations = campaign.locations.filter(
-      (loc) => state.kinds.has(loc.kind) && (nameHit || locationMatches(loc, query)),
+      (loc) =>
+        state.kinds.has(loc.kind) &&
+        state.changes.has(changeOf(loc)) &&
+        (nameHit || locationMatches(loc, query)),
     );
     if (locations.length === 0) continue;
     rows.push({ campaign, locations });
@@ -311,7 +349,9 @@ function describe(loc) {
   const tag = withMatch(loc.tagName, parseQuery(state.q).text);
   tag.className = 'tag';
   line.append(tag);
-  if (loc.group) line.append(el('span', 'where', ' · merge group ' + loc.group));
+  const change = changeOf(loc);
+  const label = change === 'merge' && SHOW_GROUP ? 'merge → ' + loc.group : change;
+  line.append(el('span', 'badge ' + change, label));
   return line;
 }
 
@@ -376,9 +416,18 @@ function tagRows() {
     if (!state.statuses.has(campaign.status)) continue;
     for (const loc of campaign.locations) {
       if (!state.kinds.has(loc.kind)) continue;
+      if (!state.changes.has(changeOf(loc))) continue;
       let row = byTag.get(loc.tagId);
       if (!row) {
-        row = { tagId: loc.tagId, tagName: loc.tagName, group: loc.group, campaigns: new Set(), live: new Set(), kinds: { trigger: 0, decision: 0, step: 0 } };
+        row = {
+          tagId: loc.tagId,
+          tagName: loc.tagName,
+          group: loc.group,
+          change: changeOf(loc),
+          campaigns: new Set(),
+          live: new Set(),
+          kinds: { trigger: 0, decision: 0, step: 0 },
+        };
         byTag.set(loc.tagId, row);
       }
       row.campaigns.add(loc.campaignId);
@@ -423,7 +472,9 @@ function render() {
           ? 'No campaign status is selected.'
           : state.kinds.size === 0
             ? 'No location type is selected — pick at least one of Trigger, Decision or Sequence step.'
-            : 'Nothing matches those filters.';
+            : state.changes.size === 0
+              ? 'No tag change is selected — pick Delete, Merge or both.'
+              : 'Nothing matches those filters.';
       campaignsView.append(el('div', 'empty', why));
       return;
     }
@@ -436,9 +487,13 @@ function render() {
   const rows = tagRows();
   const body = tagsView.querySelector('tbody');
   body.replaceChildren();
-  if (rows.length === 0 && state.kinds.size === 0) {
-    const cell = el('td', null, 'No location type is selected.');
-    cell.colSpan = 8;
+  if (rows.length === 0 && (state.kinds.size === 0 || state.changes.size === 0)) {
+    const cell = el(
+      'td',
+      null,
+      state.kinds.size === 0 ? 'No location type is selected.' : 'No tag change is selected.',
+    );
+    cell.colSpan = 9;
     const tr = el('tr');
     tr.append(cell);
     body.append(tr);
@@ -453,8 +508,12 @@ function render() {
     tr.append(idCell);
     const nameCell = el('td');
     nameCell.append(withMatch(row.tagName, q));
-    if (row.group) nameCell.append(el('span', 'where', ' · ' + row.group));
     tr.append(nameCell);
+    const changeCell = el('td');
+    changeCell.append(
+      el('span', 'badge ' + row.change, row.change === 'merge' && SHOW_GROUP ? 'merge → ' + row.group : row.change),
+    );
+    tr.append(changeCell);
     tr.append(el('td', 'num', String(row.campaigns.size)));
     const liveCell = el('td', 'num', String(row.live.size));
     if (row.live.size > 0) liveCell.style.color = 'var(--live)';
@@ -491,26 +550,31 @@ document.getElementById('q').addEventListener('input', (event) => {
 });
 const ALL_STATUSES = ['live', 'stopped', 'never-published', 'unknown'];
 const ALL_KINDS = ['trigger', 'decision', 'step'];
+const ALL_CHANGES = ['delete', 'merge'];
+
+/** Which state set a chip belongs to. */
+const setFor = (chip) =>
+  chip.dataset.status ? state.statuses : chip.dataset.kind ? state.kinds : state.changes;
+const keyFor = (chip) => chip.dataset.status ?? chip.dataset.kind ?? chip.dataset.change;
 
 /** Whether anything is narrowed, which is what the reset link is for. */
 const isFiltered = () =>
   state.q.trim() !== '' ||
   state.statuses.size !== ALL_STATUSES.length ||
-  state.kinds.size !== ALL_KINDS.length;
+  state.kinds.size !== ALL_KINDS.length ||
+  state.changes.size !== ALL_CHANGES.length;
 
 function syncChips() {
   for (const chip of document.querySelectorAll('.chip')) {
-    const set = chip.dataset.status ? state.statuses : state.kinds;
-    const key = chip.dataset.status ?? chip.dataset.kind;
-    chip.setAttribute('aria-pressed', String(set.has(key)));
+    chip.setAttribute('aria-pressed', String(setFor(chip).has(keyFor(chip))));
   }
   document.getElementById('reset').classList.toggle('hidden', !isFiltered());
 }
 
 for (const chip of document.querySelectorAll('.chip')) {
   chip.addEventListener('click', () => {
-    const set = chip.dataset.status ? state.statuses : state.kinds;
-    const key = chip.dataset.status ?? chip.dataset.kind;
+    const set = setFor(chip);
+    const key = keyFor(chip);
     if (set.has(key)) set.delete(key);
     else set.add(key);
     syncChips();
@@ -523,6 +587,7 @@ document.getElementById('reset').addEventListener('click', () => {
   document.getElementById('q').value = '';
   state.statuses = new Set(ALL_STATUSES);
   state.kinds = new Set(ALL_KINDS);
+  state.changes = new Set(ALL_CHANGES);
   syncChips();
   render();
 });
@@ -569,6 +634,25 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
 
   const chip = (label: string, attr: string, value: string, cls = '') =>
     `<button class="chip ${cls}" ${attr}="${value}" aria-pressed="true">${escapeHtml(label)}</button>`;
+
+  // A filter with one option filters nothing; only offer it when the list holds
+  // both kinds of change.
+  const changes = new Set(
+    report.campaigns.flatMap((c) =>
+      c.locations.map((l) => (l.group === null || l.group === undefined ? 'delete' : 'merge')),
+    ),
+  );
+  const changeGroup =
+    changes.size < 2
+      ? ''
+      : `<div class="group" role="group" aria-label="Tag change">
+      <span class="glabel">Tag change</span>
+      <div class="chips">
+        ${chip('Delete', 'data-change', 'delete')}
+        ${chip('Merge', 'data-change', 'merge')}
+      </div>
+    </div>`;
+
 
   return `<!doctype html>
 <html lang="en">
@@ -622,6 +706,7 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
         ${chip('Sequence step', 'data-kind', 'step')}
       </div>
     </div>
+    ${changeGroup}
     <button class="reset hidden" id="reset" type="button">Reset filters</button>
   </div>
   <select id="sort" aria-label="Sort">
@@ -637,7 +722,7 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
 <div id="tags" class="hidden">
   <table>
     <thead><tr>
-      <th>Tag</th><th>Name</th><th class="num">Campaigns</th><th class="num">Live</th>
+      <th>Tag</th><th>Name</th><th>Change</th><th class="num">Campaigns</th><th class="num">Live</th>
       <th class="num">Trig</th><th class="num">Dec</th><th class="num">Step</th><th></th>
     </tr></thead>
     <tbody></tbody>

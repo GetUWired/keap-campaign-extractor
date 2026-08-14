@@ -157,3 +157,31 @@ describe('campaign status in the page', () => {
     expect(renderTagImpact(report())).not.toContain('by status');
   });
 });
+
+describe('what change each tag is undergoing', () => {
+  it('marks a tag with no group as a deletion', () => {
+    const page = renderTagImpact(report({ campaigns: [campaign()] }));
+    expect(page).toContain('[delete]');
+  });
+
+  it('names the merge group when the list has more than one', () => {
+    const page = renderTagImpact(
+      report({
+        campaigns: [
+          campaign({ campaignId: '16', locations: [location({ group: 'newsletter' })] }),
+          campaign({ campaignId: '17', locations: [location({ group: 'welcome' })] }),
+        ],
+      }),
+    );
+    expect(page).toContain('[merge → newsletter]');
+    expect(page).toContain('[merge → welcome]');
+  });
+
+  it('omits a group name that every merged tag shares, since it says nothing', () => {
+    const page = renderTagImpact(
+      report({ campaigns: [campaign({ locations: [location({ group: 'merge' })] })] }),
+    );
+    expect(page).toContain('[merge]');
+    expect(page).not.toContain('merge → merge');
+  });
+});

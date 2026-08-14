@@ -32,8 +32,21 @@ const CAVEAT = [
 /** A pipe inside a name would split a Markdown table cell. */
 const cell = (text: string): string => plainText(text).replace(/\|/g, '\\|');
 
-function describeLocation(location: ImpactLocation): string {
-  const tag = `\`${location.tagId}\` ${cell(location.tagName)}`;
+/**
+ * What is being done to the tag: no group means delete outright, a group means
+ * merge into the others sharing it.
+ *
+ * `showGroup` is false when the whole list uses one group name, which then says
+ * only "merging" — printing "merge to merge" on 700 rows is noise.
+ */
+function describeLocation(location: ImpactLocation, showGroup: boolean): string {
+  const change =
+    location.group === null
+      ? '[delete]'
+      : showGroup
+        ? `[merge → ${cell(location.group)}]`
+        : '[merge]';
+  const tag = `\`${location.tagId}\` ${cell(location.tagName)} ${change}`;
   if (location.kind === 'trigger') {
     const goal =
       location.nodeName === null || location.nodeName === undefined
@@ -81,6 +94,10 @@ export function renderTagImpact(report: TagImpactReport): string {
     ...CAVEAT,
     '',
   ];
+
+  const groups = new Set(report.campaigns.flatMap((c) => c.locations.map((l) => l.group)));
+  groups.delete(null);
+  const showGroup = groups.size > 1;
 
   const referenced = report.tags.filter((t) => t.locations.length > 0);
   const locations = report.campaigns.reduce((n, c) => n + c.locations.length, 0);
@@ -137,7 +154,7 @@ export function renderTagImpact(report: TagImpactReport): string {
       }
       const order = { trigger: 0, decision: 1, step: 2 } as const;
       for (const location of [...campaign.locations].sort((a, b) => order[a.kind] - order[b.kind])) {
-        lines.push(`- ${describeLocation(location)}`);
+        lines.push(`- ${describeLocation(location, showGroup)}`);
       }
       lines.push('');
     }

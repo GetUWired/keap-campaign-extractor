@@ -109,12 +109,34 @@ describe('renderTagImpactHtml', () => {
     const groups = [...page.matchAll(/<div class="group"[\s\S]*?<\/div>\s*<\/div>/g)].map((m) => m[0]);
     expect(groups).toHaveLength(2);
 
+
     const statusGroup = groups.find((g) => g.includes('data-status')) ?? '';
     const kindGroup = groups.find((g) => g.includes('data-kind')) ?? '';
     expect(statusGroup).toContain('Campaign status');
     expect(statusGroup).not.toContain('data-kind');
     expect(kindGroup).toContain('Tag used as');
     expect(kindGroup).not.toContain('data-status');
+  });
+
+  it('offers a delete/merge filter when the list holds both', () => {
+    const both = report({
+      campaigns: [
+        campaign({ campaignId: '16', locations: [location({ group: null })] }),
+        campaign({ campaignId: '17', locations: [location({ group: 'newsletter' })] }),
+      ],
+    });
+    const page = renderTagImpactHtml(both);
+    expect(page).toContain('Tag change');
+    expect(page).toContain('data-change="delete"');
+    expect(page).toContain('data-change="merge"');
+    const groups = [...page.matchAll(/<div class="group"[\s\S]*?<\/div>\s*<\/div>/g)];
+    expect(groups).toHaveLength(3);
+  });
+
+  it('omits that filter when every tag is the same kind of change', () => {
+    // One option filters nothing.
+    const page = renderTagImpactHtml(report({ campaigns: [campaign()] }));
+    expect(page).not.toContain('data-change=');
   });
 
   it('offers a way back out of a filtered state', () => {
