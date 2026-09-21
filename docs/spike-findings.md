@@ -1218,3 +1218,37 @@ collector accepts `^[A-Za-z0-9][A-Za-z0-9-]{0,63}$` and reads unlifted attribute
 - Email attachments.
 - Whether the editor GETs above take an editor lock server-side — none was observed, but a lock is
   not visible from the response.
+
+### Live check (2026-09-21, se232)
+
+`fetch-content` against se232 with the five sources registered — every request a guarded GET,
+`0 non-GET` in every run.
+
+| Kind | Fetched | Result |
+|---|---|---|
+| SMS | 3 | Full message text on the two configured steps (289 and 187 characters); the unconfigured step exports as an empty message. Three SMS steps carry only `automationMessageId` and stay unserved. |
+| Apply Note | 5 | Type, title, multi-line body with merge fields; `assignTo: systemUserId`. |
+| HTTP Request | 1 | se232's only one is unconfigured — exports as an empty POST. **The populated-row parser is still unconfirmed**; no configured HTTP Request exists in se232 or jordan. |
+| Email | 4 + id 0 | Subject, from, to, HTML; 17 assets on each beta-builder email (a Google Fonts stylesheet, its fonts, images), none failed. Export derives a readable `body.txt`. |
+| Web form | 3 | Name, public URL, `formType: FUNNEL`. |
+
+Defects found and fixed (commit 6bd1e97):
+
+- **`marketingEmailId="0"`** on an unconfigured Unlayer email step was requested and recorded as not
+  found. An all-zero id now means "nothing selected" and is not collected.
+- **FUNNEL web forms use `exit_option: "AUTHORING_MESSAGE"`** — a thank-you message designed in the
+  campaign builder. It mapped to `unknown`; it is now `message`, and the stale `thank_you_page_url`
+  Keap leaves on these forms is not reported as its value.
+- **Keap's file host serves JPEGs as `image/pjpeg`**, which was saved as `.bin`. Now `.jpg`.
+
+Other observations:
+
+- **A missing note id returns HTTP 500** from `/app/noteFunnel/edit`, not a blank editor — so a
+  deleted note is recorded as `failed` (reason `HTTP 500`), not exported as a blank note. The
+  blank-editor rule remains as a backstop.
+- The export of funnel 803 reproduces the campaign flow (tag → email → date timer → email → date
+  timer → email), with its Convrrt landing-page goal marked `notFetched`.
+
+Still open: a configured HTTP Request to confirm the parser; what an expired session returns from
+the `/app/` endpoints; whether webformIds absent from the v2 list are deleted, archived or a type the
+list omits.
