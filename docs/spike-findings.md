@@ -1280,3 +1280,12 @@ are out of bounds.
 
 Consequence: legacy web forms referenced by campaigns are recorded as `failed` with a reason naming
 the gap; they must be rebuilt by hand from Keap.
+
+**Correction — it is publication, not form type.** The operator marked form 409's goal ready and
+published campaign 11107; the next walk of the list returned 63 forms, with **409 now listed as
+`FUNNEL`**. A form built inside a campaign enters the v2 list only once its campaign is published
+with that form goal ready. The "no `LEGACY` forms" reading above was an inference and is wrong as the
+explanation: the five absent forms are the unpublished, unready or unconnected ones. So the forms a
+migration needs most — those collecting contacts in published campaigns — are readable; drafts are
+recorded as `failed` with a reason saying why, and are rebuilt by hand if they are wanted at all.
+(Side effect of the test: campaign 11107 is now live, and its local extract is stale.)
