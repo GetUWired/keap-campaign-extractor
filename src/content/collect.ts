@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { campaignDirFor } from '../app.js';
 import { type NormalizedNode, parseNodes, referenceValues } from '../normalize/nodes.js';
+import { stripLongSuffix } from '../parse/cells.js';
 import {
+  CONTENT_ID_PATTERN,
   CONTENT_KINDS,
   type ContentItem,
   type ContentItemKey,
@@ -17,12 +19,6 @@ export interface ContentRef {
   use: ContentUse;
 }
 
-/**
- * Keap content ids are integers. Anything else is refused here because ids
- * become path segments in the store.
- */
-const CONTENT_ID = /^\d+$/;
-
 /** Every content reference the nodes make, one per (node, attribute, id). */
 export function contentRefsOf(
   nodes: NormalizedNode[],
@@ -31,8 +27,16 @@ export function contentRefsOf(
   for (const node of nodes) {
     for (const kind of CONTENT_KINDS) {
       for (const attribute of KIND_ATTRIBUTES[kind]) {
-        for (const id of referenceValues(node.references, attribute)) {
-          if (CONTENT_ID.test(id)) out.push({ key: { kind, attribute, id }, node });
+        // Most content ids are lifted into node.references. Some — like
+        // convrrtLandingPageId — are not FK_ATTRIBUTES, so they stay in
+        // node.config; fall back there when the reference didn't carry one.
+        let ids = referenceValues(node.references, attribute);
+        if (ids.length === 0) {
+          const configId = stripLongSuffix(node.config[attribute]);
+          if (configId) ids = [configId];
+        }
+        for (const id of ids) {
+          if (CONTENT_ID_PATTERN.test(id)) out.push({ key: { kind, attribute, id }, node });
         }
       }
     }
@@ -91,7 +95,8 @@ export function buildQueue(refs: ContentRef[]): ContentItem[] {
     (a, b) =>
       (KIND_ORDER.get(a.kind) ?? 0) - (KIND_ORDER.get(b.kind) ?? 0) ||
       a.attribute.localeCompare(b.attribute) ||
-      Number(a.id) - Number(b.id),
+      Number(a.id) - Number(b.id) ||
+      a.id.localeCompare(b.id),
   );
 }
 

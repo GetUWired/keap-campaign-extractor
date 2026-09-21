@@ -19,7 +19,7 @@ export type ContentKind = (typeof CONTENT_KINDS)[number];
  */
 export const KIND_ATTRIBUTES: Record<ContentKind, readonly string[]> = {
   email: ['marketingEmailId'],
-  landingPage: ['landingPageId', 'unlayerLandingPageId'],
+  landingPage: ['landingPageId', 'unlayerLandingPageId', 'convrrtLandingPageId'],
   form: ['webformId', 'smartFormInstanceId', 'internalFormId'],
   sms: ['marketingAutomatedSmsId', 'automationMessageId'],
   note: ['marketingNoteId'],
@@ -35,6 +35,13 @@ export const KIND_FOLDERS: Record<ContentKind, string> = {
   note: 'notes',
   http: 'http',
 };
+
+/**
+ * Keap ids are integers for most content, but UUIDs for Unlayer/Convrrt
+ * landing pages. Ids become path segments under the store, so nothing else
+ * is accepted.
+ */
+export const CONTENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
 export interface ContentItemKey {
   kind: ContentKind;

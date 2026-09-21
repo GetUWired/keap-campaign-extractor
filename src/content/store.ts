@@ -2,7 +2,12 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { normalizeAppName } from '../app.js';
-import type { ContentItemKey, ContentRecord, FetchedContent } from './types.js';
+import {
+  CONTENT_ID_PATTERN,
+  type ContentItemKey,
+  type ContentRecord,
+  type FetchedContent,
+} from './types.js';
 
 /**
  * File names come from sources, which parse remote responses — so a name is a
@@ -21,7 +26,7 @@ export function contentRootFor(app: string): string {
 }
 
 export function rawItemDirFor(app: string, key: ContentItemKey): string {
-  if (!/^[A-Za-z]+$/.test(key.attribute) || !/^\d+$/.test(key.id)) {
+  if (!/^[A-Za-z]+$/.test(key.attribute) || !CONTENT_ID_PATTERN.test(key.id)) {
     throw new Error(`Unsafe content key ${key.kind}/${key.attribute}/${key.id}`);
   }
   return join(contentRootFor(app), 'raw', key.kind, `${key.attribute}-${key.id}`);

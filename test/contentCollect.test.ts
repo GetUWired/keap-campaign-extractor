@@ -11,6 +11,9 @@ const email = (cellId: string, id: string) =>
     references: { tagIds: [], tagCategoryIds: [], marketingEmailId: id },
   });
 
+const UNLAYER_ID = 'f2b4dd0d-3a9a-4442-8b04-dd5388c060c2';
+const CONVRRT_ID = 'a48c6cc8-af85-498d-8b86-cac4eda2977b';
+
 describe('itemKey / itemDirName', () => {
   it('keys on kind, attribute and id', () => {
     expect(itemKey({ kind: 'form', attribute: 'webformId', id: '681' })).toBe('form:webformId:681');
@@ -20,6 +23,12 @@ describe('itemKey / itemDirName', () => {
     expect(itemDirName({ kind: 'form', attribute: 'webformId', id: '681' })).toBe('681');
     expect(itemDirName({ kind: 'form', attribute: 'internalFormId', id: '681' })).toBe(
       'internalFormId-681',
+    );
+  });
+
+  it('prefixes a convrrt landing page key with its attribute', () => {
+    expect(itemDirName({ kind: 'landingPage', attribute: 'convrrtLandingPageId', id: CONVRRT_ID })).toBe(
+      `convrrtLandingPageId-${CONVRRT_ID}`,
     );
   });
 });
@@ -51,12 +60,50 @@ describe('contentRefsOf', () => {
     ]);
   });
 
-  it('ignores ids that are not integers', () => {
+  it('ignores ids that fail the content id pattern', () => {
     const node = makeNode({
       references: { tagIds: [], tagCategoryIds: [], marketingEmailId: '../../etc' },
     });
     expect(contentRefsOf([node])).toEqual([]);
   });
+
+  it('lifts a UUID reference for a modern Unlayer landing page', () => {
+    const node = makeNode({
+      style: 'unlayerLandingPage',
+      references: { tagIds: [], tagCategoryIds: [], unlayerLandingPageId: UNLAYER_ID },
+    });
+    expect(contentRefsOf([node]).map((r) => r.key)).toEqual([
+      { kind: 'landingPage', attribute: 'unlayerLandingPageId', id: UNLAYER_ID },
+    ]);
+  });
+
+  it('falls back to config for convrrtLandingPageId when there is no lifted reference', () => {
+    const node = makeNode({
+      style: 'convrrtLandingPage',
+      config: { convrrtLandingPageId: CONVRRT_ID },
+    });
+    expect(contentRefsOf([node]).map((r) => r.key)).toEqual([
+      { kind: 'landingPage', attribute: 'convrrtLandingPageId', id: CONVRRT_ID },
+    ]);
+  });
+
+  it('strips the Java Long suffix from a config fallback value', () => {
+    const node = makeNode({
+      style: 'convrrtLandingPage',
+      config: { convrrtLandingPageId: '2048L' },
+    });
+    expect(contentRefsOf([node]).map((r) => r.key.id)).toEqual(['2048']);
+  });
+
+  it.each(['../x', 'a/b', '', '-leading', 'x'.repeat(65)])(
+    'ignores the unsafe id %s',
+    (id) => {
+      const node = makeNode({
+        references: { tagIds: [], tagCategoryIds: [], marketingEmailId: id },
+      });
+      expect(contentRefsOf([node])).toEqual([]);
+    },
+  );
 });
 
 describe('campaignRefs', () => {
@@ -97,5 +144,20 @@ describe('buildQueue', () => {
       'email:marketingEmailId:100',
       'sms:marketingAutomatedSmsId:5',
     ]);
+  });
+
+  it('orders two UUID ids and one numeric id of the same kind/attribute deterministically', () => {
+    const uuidA = 'b2b4dd0d-3a9a-4442-8b04-dd5388c060c2';
+    const uuidB = 'f2b4dd0d-3a9a-4442-8b04-dd5388c060c2';
+    const page = (cellId: string, id: string) =>
+      makeNode({
+        cellId,
+        style: 'unlayerLandingPage',
+        references: { tagIds: [], tagCategoryIds: [], unlayerLandingPageId: id },
+      });
+    const queue = buildQueue(
+      campaignRefs('1', [page('1', uuidB), page('2', uuidA), page('3', '5')], []),
+    );
+    expect(queue.map((i) => i.id)).toEqual(['5', uuidA, uuidB]);
   });
 });

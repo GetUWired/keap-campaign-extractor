@@ -44,6 +44,22 @@ describe('the raw store', () => {
     );
   });
 
+  it('accepts a UUID id for a modern landing page', () => {
+    const key: ContentItemKey = {
+      kind: 'landingPage',
+      attribute: 'convrrtLandingPageId',
+      id: 'a48c6cc8-af85-498d-8b86-cac4eda2977b',
+    };
+    expect(rawItemDirFor('jordan', key)).toBe(
+      'artifacts/jordan/content/raw/landingPage/convrrtLandingPageId-a48c6cc8-af85-498d-8b86-cac4eda2977b',
+    );
+  });
+
+  it.each(['../x', 'a/b'])('still throws for an unsafe id %s', (id) => {
+    const key: ContentItemKey = { kind: 'sms', attribute: 'marketingAutomatedSmsId', id };
+    expect(() => rawItemDirFor('jordan', key)).toThrow();
+  });
+
   it('round-trips an item and marks it stored', async () => {
     expect(isItemStored('jordan', KEY, root)).toBe(false);
     await writeStoredItem('jordan', KEY, FETCHED, ['https://x/a.png'], '2026-09-21T00:00:00Z', root);
