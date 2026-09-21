@@ -32,12 +32,13 @@ export function parseHttpRequestEditor(
     (selected.length > 0 ? selected.attr('value') : $('#httpRequestType option').first().attr('value')) ?? 'POST'
   ).toUpperCase();
 
-  // Written as Keap stores it — not re-encoded — so merge fields stay readable
-  // and the export's URL redaction sees every parameter.
+  // Percent-encode each parameter pair so redactEncodedPairs sees whole pairs, not
+  // partial pieces if a value contains unencoded `&` or `=`. encodeURIComponent
+  // encodes `&` and `=` but not `~`, so merge fields like ~Contact.Id~ stay readable.
   const query = rows($, 'QUERY');
   let url = ($('#targetUrl').attr('value') ?? '').trim();
   if (query.length > 0) {
-    url += (url.includes('?') ? '&' : '?') + query.map((p) => `${p.name}=${p.value}`).join('&');
+    url += (url.includes('?') ? '&' : '?') + query.map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join('&');
   }
 
   const body = $('#http-request-body').text();

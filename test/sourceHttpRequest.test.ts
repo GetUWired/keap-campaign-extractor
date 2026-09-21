@@ -65,6 +65,33 @@ describe('parseHttpRequestEditor', () => {
     );
   });
 
+  it('percent-encodes query values containing & and = so redaction sees whole pairs', () => {
+    // Replace api_key value with one containing & and = (HTML-encoded for the fixture)
+    const withInjection = configured.replace(
+      'value="EXAMPLE_KEY_123"',
+      'value="EXAMPLE&amp;injected=leaked"',
+    );
+    const record = parseHttpRequestEditor(withInjection)?.record as HttpContent;
+    // Value decoded by cheerio: EXAMPLE&injected=leaked, then encoded: EXAMPLE%26injected%3Dleaked
+    expect(record.url).toBe(
+      'https://hooks.example.com/contacts/~Contact.Id~?source=keap&api_key=EXAMPLE%26injected%3Dleaked',
+    );
+    // After redaction, neither EXAMPLE nor leaked should appear
+    const { content, redacted } = redactHttp(record);
+    expect(content.url).not.toContain('EXAMPLE');
+    expect(content.url).not.toContain('leaked');
+    expect(redacted).toContainEqual({ location: 'query', name: 'api_key' });
+  });
+
+  it('preserves merge fields (~) in query parameters without encoding them', () => {
+    const withMergeField = configured.replace('value="keap"', 'value="~Contact.Id~"');
+    const record = parseHttpRequestEditor(withMergeField)?.record as HttpContent;
+    // Merge field stays literal, not encoded
+    expect(record.url).toBe(
+      'https://hooks.example.com/contacts/~Contact.Id~?source=~Contact.Id~&api_key=EXAMPLE_KEY_123',
+    );
+  });
+
   it('returns null for anything that is not the request editor', () => {
     expect(parseHttpRequestEditor('<div id="wrapper_httpRequest"></div>')).toBeNull();
   });
