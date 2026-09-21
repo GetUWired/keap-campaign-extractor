@@ -168,7 +168,7 @@ export function anonymousFetcher(
 /** Keap-hosted files (file box downloads may need the session), through the read-only guard. */
 export function sessionFetcher(context: BrowserContext): AssetFetcher {
   return async (url) => {
-    const response = await safeGet(context, url);
+    const response = await safeGet(context, url, { timeout: ASSET_TIMEOUT_MS });
     assertResponseAuthenticated(response);
     const headers = response.headers();
     const declared = Number.parseInt(headers['content-length'] ?? '', 10);
@@ -176,6 +176,7 @@ export function sessionFetcher(context: BrowserContext): AssetFetcher {
       status: response.status(),
       contentType: headers['content-type'] ?? null,
       contentLength: Number.isFinite(declared) ? declared : null,
+      // Playwright's APIResponse cannot stream; the 25 MB cap is enforced after reading.
       body: () => response.body(),
     };
   };

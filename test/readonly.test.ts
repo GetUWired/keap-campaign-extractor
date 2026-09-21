@@ -1,3 +1,4 @@
+import type { BrowserContext } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { classifyRequest } from '../src/guard/readonly.js';
 
@@ -77,5 +78,37 @@ describe('classifyRequest — blocked writes', () => {
 
   it('blocks a malformed URL rather than letting it through', () => {
     expect(classifyRequest('GET', 'not-a-url')).toBe('denylist');
+  });
+});
+
+describe('safeGet timeout forwarding', () => {
+  it('forwards timeout to context.request.get', async () => {
+    const { safeGet } = await import('../src/guard/readonly.js');
+    let capturedOptions: { timeout?: number } | undefined;
+    const fakeBrowserContext = {
+      request: {
+        get: async (_url: string, options?: { timeout?: number }) => {
+          capturedOptions = options;
+          return { status: () => 200, headers: () => ({}), body: async () => Buffer.alloc(0) };
+        },
+      },
+    } as unknown as BrowserContext;
+    await safeGet(fakeBrowserContext, 'https://se232.infusionsoft.com/a.png', { timeout: 30000 });
+    expect(capturedOptions).toEqual({ timeout: 30000 });
+  });
+
+  it('refuses blocked URLs without calling context.request.get', async () => {
+    const { safeGet } = await import('../src/guard/readonly.js');
+    let getWasCalled = false;
+    const fakeBrowserContext = {
+      request: {
+        get: async () => {
+          getWasCalled = true;
+          throw new Error('should not be called');
+        },
+      },
+    } as unknown as BrowserContext;
+    await expect(safeGet(fakeBrowserContext, 'https://x.infusionsoft.com/app/funnel/saveDraft')).rejects.toThrow();
+    expect(getWasCalled).toBe(false);
   });
 });

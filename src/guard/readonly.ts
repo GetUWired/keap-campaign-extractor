@@ -132,10 +132,14 @@ export function installReadOnlyGuard(context: BrowserContext): Guard {
  * requests made through it bypass installReadOnlyGuard entirely. This wrapper
  * re-applies the same policy and exposes no verb other than GET.
  */
-export async function safeGet(context: BrowserContext, url: string): Promise<APIResponse> {
+export async function safeGet(
+  context: BrowserContext,
+  url: string,
+  options: { timeout?: number } = {},
+): Promise<APIResponse> {
   const reason = classifyRequest('GET', url);
   if (reason) {
     throw new Error(`safeGet refused ${url} (${reason})`);
   }
-  return context.request.get(url);
+  return context.request.get(url, options.timeout === undefined ? undefined : { timeout: options.timeout });
 }
