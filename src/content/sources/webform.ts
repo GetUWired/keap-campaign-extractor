@@ -17,17 +17,19 @@ const text = (value: unknown): string | null =>
 
 export function mapWebform(entry: WebformEntry): FetchedContent {
   const exit = entry.exit_option;
+  const isMessage = exit === 'MESSAGE' || exit === 'AUTHORING_MESSAGE';
   const record: FormContent = {
     kind: 'form',
     name: cleanName(text(entry.name)),
     fields: [],
     fieldsAvailable: false,
     thankYou: {
-      type: exit === 'REDIRECT' ? 'redirect' : exit === 'MESSAGE' ? 'message' : 'unknown',
-      // MESSAGE: the API carries no message text for this exit type, so `value` is
-      // the thank-you URL field, which is normally null for a MESSAGE exit — not
-      // the message shown to the contact.
-      value: text(entry.thank_you_page_url),
+      type: isMessage ? 'message' : exit === 'REDIRECT' ? 'redirect' : 'unknown',
+      // MESSAGE and AUTHORING_MESSAGE: for message exits, the thank-you text is
+      // designed in the campaign builder, not carried in the API response. The
+      // thank_you_page_url field is stale (Keap leaves it behind) and must not be
+      // used. For REDIRECT and unknown exits, thank_you_page_url is the actual target.
+      value: isMessage ? null : text(entry.thank_you_page_url),
     },
     publicUrl: text(entry.webform_url),
     formType: text(entry.webform_type),

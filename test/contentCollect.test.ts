@@ -104,6 +104,30 @@ describe('contentRefsOf', () => {
       expect(contentRefsOf([node])).toEqual([]);
     },
   );
+
+  it('skips ids that consist only of zeros (0 means nothing selected)', () => {
+    const node0 = makeNode({
+      references: { tagIds: [], tagCategoryIds: [], marketingEmailId: '0' },
+    });
+    expect(contentRefsOf([node0])).toEqual([]);
+  });
+
+  it('skips 0L (Keap uses 0 / 0L for "none")', () => {
+    const node = makeNode({
+      style: 'convrrtLandingPage',
+      config: { convrrtLandingPageId: '0L' },
+    });
+    expect(contentRefsOf([node])).toEqual([]);
+  });
+
+  it('still collects valid numeric ids like 10', () => {
+    const node = makeNode({
+      references: { tagIds: [], tagCategoryIds: [], marketingEmailId: '10' },
+    });
+    const refs = contentRefsOf([node]);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.key).toEqual({ kind: 'email', attribute: 'marketingEmailId', id: '10' });
+  });
 });
 
 describe('campaignRefs', () => {

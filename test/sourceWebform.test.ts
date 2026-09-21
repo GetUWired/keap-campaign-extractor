@@ -54,6 +54,20 @@ describe('createWebformSource', () => {
     expect(fetched.record).toMatchObject({ thankYou: { type: 'message', value: null } });
   });
 
+  it('maps an AUTHORING_MESSAGE exit to message type with null value', async () => {
+    const source = createWebformSource();
+    const testEntry: unknown[] = [
+      {
+        id: '99',
+        name: 'Funnel Form',
+        thank_you_page_url: 'http://www.example.com',
+        exit_option: 'AUTHORING_MESSAGE',
+      },
+    ];
+    const fetched = await source.fetch(key('99'), ctxWith(async () => testEntry));
+    expect(fetched.record).toMatchObject({ thankYou: { type: 'message', value: null } });
+  });
+
   it('reads the list once per run', async () => {
     let calls = 0;
     const paths: string[] = [];

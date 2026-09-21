@@ -36,7 +36,13 @@ export function contentRefsOf(
           if (configId) ids = [configId];
         }
         for (const id of ids) {
-          if (CONTENT_ID_PATTERN.test(id)) out.push({ key: { kind, attribute, id }, node });
+          if (CONTENT_ID_PATTERN.test(id)) {
+            // Skip ids that consist only of zeros: Keap uses 0 / 0L for "nothing selected"
+            // and treats them as unconfigured, not as a reference to content id 0.
+            if (!/^0+$/.test(id)) {
+              out.push({ key: { kind, attribute, id }, node });
+            }
+          }
         }
       }
     }

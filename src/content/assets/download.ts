@@ -75,6 +75,8 @@ export class AssetTooLargeError extends Error {
 const EXTENSION_BY_TYPE: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/pjpeg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
   'image/svg+xml': 'svg',

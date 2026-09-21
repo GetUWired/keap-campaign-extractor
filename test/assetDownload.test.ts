@@ -420,6 +420,14 @@ describe('extensionFor', () => {
     expect(extensionFor('https://x/a.PDF', null)).toBe('pdf');
     expect(extensionFor('https://x/download', null)).toBe('bin');
   });
+
+  it('maps image/pjpeg (old JPEG MIME type) to jpg', () => {
+    expect(extensionFor('https://x/f', 'image/pjpeg')).toBe('jpg');
+  });
+
+  it('maps image/jpg to jpg', () => {
+    expect(extensionFor('https://x/f', 'image/jpg')).toBe('jpg');
+  });
 });
 
 describe('asset ledger', () => {
