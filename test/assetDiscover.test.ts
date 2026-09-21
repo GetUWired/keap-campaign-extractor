@@ -36,6 +36,7 @@ describe('classifyUrl', () => {
     ['ftp://x.com/a.png', 'unsupportedScheme'],
     ['http://192.168.1.4/a.png', 'privateHost'],
     ['http://localhost:3000/a.png', 'privateHost'],
+    ['http://[::ffff:127.0.0.1]/a.png', 'privateHost'],
   ])('skips %s as %s', (url, reason) => {
     expect(classifyUrl(url, null)).toMatchObject({ reason });
   });
@@ -49,14 +50,26 @@ describe('isKeapHosted / isPrivateHost', () => {
     expect(isKeapHosted('not a url')).toBe(false);
   });
 
-  it.each(['10.0.0.1', '127.0.0.1', '172.20.1.1', '169.254.1.1', '[::1]', 'localhost'])(
-    'treats %s as private',
-    (host) => expect(isPrivateHost(host)).toBe(true),
-  );
+  it.each([
+    '10.0.0.1',
+    '127.0.0.1',
+    '172.20.1.1',
+    '169.254.1.1',
+    '[::1]',
+    'localhost',
+    '[::ffff:7f00:1]',
+    '[::ffff:c0a8:0101]',
+    '[fe80::1]',
+    '[fc00::1]',
+    '[fd12:3456::1]',
+    '[::]',
+  ])('treats %s as private', (host) => expect(isPrivateHost(host)).toBe(true));
 
   it('treats public hosts as public', () => {
     expect(isPrivateHost('172.32.0.1')).toBe(false);
     expect(isPrivateHost('cdn.example.com')).toBe(false);
+    expect(isPrivateHost('[2606:4700::1111]')).toBe(false);
+    expect(isPrivateHost('[::ffff:808:808]')).toBe(false);
   });
 });
 

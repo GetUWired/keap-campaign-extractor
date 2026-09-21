@@ -56,6 +56,57 @@ export function isPrivateHost(hostname: string): boolean {
   if (host === 'localhost' || host.endsWith('.localhost') || host === '::1' || host === '0.0.0.0') {
     return true;
   }
+
+  // IPv6 detection: contains ':'
+  if (host.includes(':')) {
+    // Loopback :: and ::1 already handled above, but be thorough
+    if (host === '::') return true;
+
+    // Link-local: fe80::/10 (first group fe80-febf)
+    if (/^fe[89a-b][0-9a-f]:/i.test(host)) return true;
+
+    // Unique-local: fc00::/7 and fd00::/8 (first group fc or fd)
+    if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
+
+    // IPv4-mapped IPv6: ::ffff:x.x.x.x or ::ffff:hexhex:hexhex
+    const ipv4MappedMatch = /^::ffff:(?:(\d+)\.(\d+)\.(\d+)\.(\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(host);
+    if (ipv4MappedMatch) {
+      if (ipv4MappedMatch[1]) {
+        // Dotted decimal form
+        const a = Number(ipv4MappedMatch[1]);
+        const b = Number(ipv4MappedMatch[2]);
+        const c = Number(ipv4MappedMatch[3]);
+        const d = Number(ipv4MappedMatch[4]);
+        // Decode the IPv4 address and check if it's private
+        return (
+          a === 0 ||
+          a === 10 ||
+          a === 127 ||
+          (a === 169 && b === 254) ||
+          (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && b === 168)
+        );
+      } else {
+        // Hex form (e.g., ::ffff:7f00:1 for 127.0.0.1)
+        const hex1 = parseInt(ipv4MappedMatch[5] ?? '', 16);
+        const hex2 = parseInt(ipv4MappedMatch[6] ?? '', 16);
+        const a = (hex1 >> 8) & 0xff;
+        const b = hex1 & 0xff;
+        // Check if decoded IPv4 is private
+        return (
+          a === 0 ||
+          a === 10 ||
+          a === 127 ||
+          (a === 169 && b === 254) ||
+          (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && b === 168)
+        );
+      }
+    }
+
+    return false;
+  }
+
   const octets = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
   if (!octets) return false;
   const a = Number(octets[1]);
@@ -87,7 +138,7 @@ export function classifyUrl(raw: string, base: string | null): { url: string } |
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { url: trimmed, reason: 'unsupportedScheme' };
   }
-  if (isPrivateHost(parsed.hostname)) return { url: parsed.href, reason: 'privateHost' };
+  if (isPrivateHost(parsed.hostname ?? '')) return { url: parsed.href, reason: 'privateHost' };
   parsed.hash = '';
   return { url: parsed.href };
 }
