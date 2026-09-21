@@ -1,6 +1,7 @@
 import { type CheerioAPI, load } from 'cheerio';
+import { SessionExpiredError } from '../../errors.js';
 import type { ContentSource, HttpContent, NameValue } from '../types.js';
-import { appGet } from './appGet.js';
+import { appGet, looksLikeSignInPage } from './appGet.js';
 
 export function httpRequestPath(id: string): string {
   return `/app/httpRequestFunnel/requests/${encodeURIComponent(id)}`;
@@ -25,7 +26,19 @@ export function parseHttpRequestEditor(
   html: string,
 ): { configId: string | null; record: HttpContent } | null {
   const $ = load(html);
-  if ($('#httpRequestType').length === 0) return null;
+  // All four must be present — not just #httpRequestType — so a page that resembles
+  // the editor but is missing a table (a Keap markup change, a partial render) fails
+  // loudly instead of silently reading as an empty request. The populated-row markup
+  // itself is unconfirmed against a live account (see test/fixtures/content/README.md);
+  // Task 8 in the plan confirms it.
+  if (
+    $('#httpRequestType').length === 0 ||
+    $('#paramTable-QUERY').length === 0 ||
+    $('#paramTable-HEADER').length === 0 ||
+    $('#http-request-body').length === 0
+  ) {
+    return null;
+  }
 
   const selected = $('#httpRequestType option[selected]').first();
   const method = (
@@ -36,10 +49,16 @@ export function parseHttpRequestEditor(
   // partial pieces if a value contains unencoded `&` or `=`. encodeURIComponent
   // encodes `&` and `=` but not `~`, so merge fields like ~Contact.Id~ stay readable.
   const query = rows($, 'QUERY');
-  let url = ($('#targetUrl').attr('value') ?? '').trim();
+  const rawUrl = ($('#targetUrl').attr('value') ?? '').trim();
+  // Append before the fragment, not after: `…?a=1#frag` has `#frag` as a fragment,
+  // which redactUrl does not scan, so parameters landing there would ship un-redacted.
+  const fragAt = rawUrl.indexOf('#');
+  let base = fragAt < 0 ? rawUrl : rawUrl.slice(0, fragAt);
+  const fragment = fragAt < 0 ? '' : rawUrl.slice(fragAt);
   if (query.length > 0) {
-    url += (url.includes('?') ? '&' : '?') + query.map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join('&');
+    base += (base.includes('?') ? '&' : '?') + query.map((p) => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join('&');
   }
+  const url = base + fragment;
 
   const body = $('#http-request-body').text();
   return {
@@ -66,6 +85,11 @@ export const httpRequestSource: ContentSource = {
     const response = await appGet(ctx, httpRequestPath(key.id));
     const parsed = parseHttpRequestEditor(response.body);
     if (parsed === null) {
+      if (looksLikeSignInPage(response.body)) {
+        throw new SessionExpiredError(
+          `Session expired — ${httpRequestPath(key.id)} returned a sign-in page. Re-run:  npm run login -- --app ${ctx.app}`,
+        );
+      }
       throw new Error(`${httpRequestPath(key.id)} returned something that is not the HTTP request editor`);
     }
     if (parsed.configId !== key.id) {

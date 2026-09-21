@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { redactHttp } from '../src/content/redact.js';
 import { httpRequestSource, parseHttpRequestEditor } from '../src/content/sources/httpRequest.js';
 import type { ContentItemKey, FetchContext, HttpContent } from '../src/content/types.js';
+import { isSessionExpired } from '../src/errors.js';
+
+const SIGN_IN_PAGE = '<form><input id="username"><input type="password"></form><h1>Sign in</h1>';
 
 const empty = readFileSync('test/fixtures/content/http-request-empty.html', 'utf8');
 const configured = readFileSync('test/fixtures/content/http-request-configured.html', 'utf8');
@@ -92,8 +95,25 @@ describe('parseHttpRequestEditor', () => {
     );
   });
 
+  it('appends query parameters before the fragment, not inside it', () => {
+    const withFragment = configured.replace(
+      'value="https://hooks.example.com/contacts/~Contact.Id~"',
+      'value="https://h.example.com/x?a=1#frag"',
+    );
+    const record = parseHttpRequestEditor(withFragment)?.record as HttpContent;
+    expect(record.url).toBe('https://h.example.com/x?a=1&source=keap&api_key=EXAMPLE_KEY_123#frag');
+
+    const { content } = redactHttp(record);
+    expect(content.url).not.toContain('EXAMPLE_KEY_123');
+  });
+
   it('returns null for anything that is not the request editor', () => {
     expect(parseHttpRequestEditor('<div id="wrapper_httpRequest"></div>')).toBeNull();
+  });
+
+  it('returns null when a required element is missing, even if #httpRequestType is present', () => {
+    const renamed = configured.replace('id="paramTable-HEADER"', 'id="paramTable-HEADER-renamed"');
+    expect(parseHttpRequestEditor(renamed)).toBeNull();
   });
 });
 
@@ -124,5 +144,11 @@ describe('httpRequestSource', () => {
   it('refuses an empty shell', async () => {
     const { ctx } = ctxServing('<div id="wrapper_httpRequest"></div>');
     await expect(httpRequestSource.fetch(key('5'), ctx)).rejects.toThrow(/not the HTTP request editor/);
+  });
+
+  it('treats a sign-in page served in place of the editor as an expired session', async () => {
+    const { ctx } = ctxServing(SIGN_IN_PAGE);
+    const error = await httpRequestSource.fetch(key('5'), ctx).catch((e: unknown) => e);
+    expect(isSessionExpired(error)).toBe(true);
   });
 });
