@@ -160,7 +160,14 @@ export async function fetchItem(key: ContentItemKey, deps: RunDeps): Promise<Ite
     return { status: 'failed', error: messageOf(error) };
   }
 
-  const { urls, counts } = await collectAssets(fetched, deps);
-  await deps.saveItem(key, fetched, urls);
-  return { status: 'done', assets: counts };
+  // One item's bad file name or failed write must not end a run over
+  // thousands; only an expired session, which fails everything after it, does.
+  try {
+    const { urls, counts } = await collectAssets(fetched, deps);
+    await deps.saveItem(key, fetched, urls);
+    return { status: 'done', assets: counts };
+  } catch (error) {
+    if (isSessionExpired(error)) throw error;
+    return { status: 'failed', error: messageOf(error) };
+  }
 }

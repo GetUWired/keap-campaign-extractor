@@ -1,9 +1,9 @@
 import type { LookupAddress } from 'node:dns';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { type IncomingHttpHeaders, type Server, createServer } from 'node:http';
 import { type AddressInfo, isIP } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { BrowserContext } from 'playwright';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { assetFilePathFor, createAssetLedger } from '../src/content/assets/assetStore.js';
@@ -444,5 +444,33 @@ describe('asset ledger', () => {
     expect(ledger.get('https://cdn.example.com/a.png')?.status).toBe('downloaded');
     expect((await ledger.read(ledger.get('https://cdn.example.com/a.png')!))?.toString()).toBe('png');
     expect(Object.keys(ledger.index().assets)).toHaveLength(2);
+  });
+
+  const FILE = `${'c'.repeat(64)}.png`;
+  const record = { url: 'https://cdn.example.com/c.png', status: 'downloaded' as const, sha256: 'c'.repeat(64), file: FILE };
+
+  it('replaces a truncated file left by an interrupted run, leaving no temp file', async () => {
+    const path = assetFilePathFor('jordan', FILE, root);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, 'pn');
+    const ledger = createAssetLedger('jordan', { updatedAt: '', assets: {} }, root);
+    await ledger.put(record, Buffer.from('png'));
+    expect(await readFile(path, 'utf8')).toBe('png');
+    expect((await readdir(dirname(path))).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('keeps an existing file of the right size', async () => {
+    const path = assetFilePathFor('jordan', FILE, root);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, 'old');
+    const ledger = createAssetLedger('jordan', { updatedAt: '', assets: {} }, root);
+    await ledger.put(record, Buffer.from('png'));
+    expect(await readFile(path, 'utf8')).toBe('old');
+  });
+
+  it('refuses to record a download without its bytes', async () => {
+    const ledger = createAssetLedger('jordan', { updatedAt: '', assets: {} }, root);
+    await expect(ledger.put(record, null)).rejects.toThrow(/without its bytes/);
+    expect(ledger.get(record.url)).toBeUndefined();
   });
 });

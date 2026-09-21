@@ -182,6 +182,35 @@ describe('fetchItem', () => {
     expect(anonymousCalls).toBe(2); // s.css and bg.png, not logo.png
   });
 
+  it('fails one item, rather than the run, when saving it throws', async () => {
+    const { d } = deps(source([EMAIL]).src);
+    d.saveItem = async () => {
+      throw new Error('Unsafe content file name: ../evil.html');
+    };
+    expect(await fetchItem(KEY, d)).toEqual({
+      status: 'failed',
+      error: 'Unsafe content file name: ../evil.html',
+    });
+  });
+
+  it('fails one item when recording its assets throws', async () => {
+    const ledger = memoryLedger();
+    ledger.put = async () => {
+      throw new Error('disk full');
+    };
+    const { d, saved } = deps(source([EMAIL]).src, ledger);
+    expect(await fetchItem(KEY, d)).toEqual({ status: 'failed', error: 'disk full' });
+    expect(saved).toEqual([]);
+  });
+
+  it('still lets session expiry from an asset download stop the run', async () => {
+    const { d } = deps(source([EMAIL]).src);
+    d.fetchers.keap = async () => {
+      throw new SessionExpiredError('expired while downloading');
+    };
+    await expect(fetchItem(KEY, d)).rejects.toBeInstanceOf(SessionExpiredError);
+  });
+
   it('fails clearly when no source serves the id space', async () => {
     const { d } = deps(source([EMAIL]).src);
     const outcome = await fetchItem({ kind: 'form', attribute: 'webformId', id: '1' }, d);

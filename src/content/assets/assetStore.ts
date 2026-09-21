@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { assertSafeFileName, contentRootFor } from '../store.js';
 import type { AssetRecord } from './download.js';
@@ -44,6 +43,14 @@ export async function saveAssetIndex(app: string, index: AssetIndex, root = '.')
   await rename(`${path}.tmp`, path);
 }
 
+async function hasSize(path: string, size: number): Promise<boolean> {
+  try {
+    return (await stat(path)).size === size;
+  } catch {
+    return false;
+  }
+}
+
 /** Files are content-addressed, so the same image used by forty emails is stored once. */
 export function createAssetLedger(
   app: string,
@@ -56,11 +63,19 @@ export function createAssetLedger(
   return {
     get: (url) => assets[url],
     async put(record, bytes) {
-      if (record.status === 'downloaded' && record.file && bytes) {
+      if (record.status === 'downloaded') {
+        if (!record.file || bytes === null) {
+          // A downloaded entry with no file behind it would export as missing forever.
+          throw new Error(`asset ledger: ${record.url} recorded as downloaded without its bytes`);
+        }
         const path = assetFilePathFor(app, record.file, root);
-        if (!existsSync(path)) {
+        // Content-addressed, so a file of the right size is this file. Anything
+        // else is a leftover from an interrupted write and is replaced.
+        if (!(await hasSize(path, bytes.length))) {
           await mkdir(assetDirFor(app, root), { recursive: true });
-          await writeFile(path, bytes);
+          const temp = `${path}.${process.pid}.tmp`;
+          await writeFile(temp, bytes);
+          await rename(temp, path);
         }
       }
       assets[record.url] = record;

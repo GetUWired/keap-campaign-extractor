@@ -367,6 +367,11 @@ It also does not perform deletions or merges. It has no write access to Keap at 
 
 ## Step 8 — Export campaign content (migration)
 
+> **Status:** the content sources — the code that reads each kind of content from Keap — land in a
+> follow-up plan. Until then `fetch-content` lists every kind it cannot read yet and makes no
+> requests for it, and `export` still writes each campaign's structure, showing that content as
+> `notFetched`.
+
 ```bash
 npm run fetch-content -- --app se232
 ```
@@ -398,8 +403,12 @@ export/se232/
 Content used by several campaigns is copied into each and lists the others under `sharedWith`.
 HTML is never modified; `assets.json` maps each original URL to its local file.
 
-**HTTP step credentials are redacted** and listed under `redacted` in each file.
-`--include-secrets` keeps them and marks the manifest; treat such an export as a secret.
+**HTTP step credentials are redacted** and listed under `redacted` in each file: secret-looking
+headers, query parameters, form fields, and keys in JSON or form-encoded bodies. A body that is
+neither JSON nor form-encoded is left as written and listed as `(unparsed — review manually)`.
+A secret embedded in the URL path itself — a Zapier or Slack webhook URL, say — cannot be detected
+and must be reviewed by hand. `--include-secrets` keeps them and marks the manifest; treat such an
+export as a secret.
 
 | Flag | Command | Meaning |
 |---|---|---|
