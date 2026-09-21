@@ -165,8 +165,8 @@ describe('planExport', () => {
   it('shows missing content as a gap rather than dropping the step', () => {
     const doc = json(files.get('campaigns/2-re-engagement/campaign.json'));
     expect(doc.sequences[0].steps.map((s: { content: unknown[] }) => s.content[0])).toEqual([
-      { kind: 'email', id: '2048', ref: 'emails/2048' },
-      { kind: 'email', id: '999', status: 'notFound' },
+      { kind: 'email', id: '2048', ref: 'emails/2048', version: 'draft' },
+      { kind: 'email', id: '999', status: 'notFound', version: 'draft' },
     ]);
     expect(plan.manifest.content.email).toEqual({ exported: 2, failed: 0, notFound: 1, notFetched: 0 });
   });
@@ -182,6 +182,36 @@ describe('planExport', () => {
       { field: '~Contact.Email~', campaignCount: 2, campaigns: ['1', '2'] },
       { field: '~Contact.FirstName~', campaignCount: 2, campaigns: ['1', '2'] },
     ]);
+  });
+
+  it('marks a stored item as stale when its latest fetch did not finish', () => {
+    const stale = planExport(
+      input({
+        statuses: new Map<string, ItemStatus>([
+          ['email:marketingEmailId:999', 'notFound'],
+          [itemKey(EMAIL_KEY), 'failed'],
+        ]),
+      }),
+    );
+    const email = json(byPath(stale.files).get('campaigns/1-welcome-series/emails/2048/email.json'));
+    expect(email).toMatchObject({ stale: true, fetchStatus: 'failed' });
+    // No progress entry at all: still stale, status unknown.
+    const http = json(byPath(stale.files).get('campaigns/1-welcome-series/http/77.json'));
+    expect(http).toMatchObject({ stale: true, fetchStatus: 'unknown' });
+  });
+
+  it('does not mark an item stale when its fetch is done', () => {
+    const fresh = planExport(
+      input({
+        statuses: new Map<string, ItemStatus>([
+          [itemKey(EMAIL_KEY), 'done'],
+          [itemKey(HTTP_KEY), 'done'],
+        ]),
+      }),
+    );
+    const email = json(byPath(fresh.files).get('campaigns/1-welcome-series/emails/2048/email.json'));
+    expect(email.stale).toBeUndefined();
+    expect(email.fetchStatus).toBeUndefined();
   });
 
   it('never plans a path outside the export', () => {

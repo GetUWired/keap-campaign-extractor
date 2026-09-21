@@ -8,7 +8,7 @@ import { CONTENT_KINDS, type ContentItemKey, type ContentKind, itemKey } from '.
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { NormalizedNode } from '../normalize/nodes.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
-import { type ContentPointer, buildCampaignDoc, draftNodesOf } from './campaignDoc.js';
+import { type ResolvedContent, buildCampaignDoc, draftNodesOf } from './campaignDoc.js';
 import { htmlToText } from './htmlText.js';
 import { findMergeFields } from './mergeFields.js';
 import {
@@ -101,7 +101,7 @@ export function planExport(input: ExportInput): ExportPlan {
   for (const { campaign, name, refs } of perCampaign) {
     const folder = `campaigns/${campaignFolderName(campaign.funnelId, name)}`;
 
-    const resolve = (key: ContentItemKey): ContentPointer => {
+    const resolve = (key: ContentItemKey): ResolvedContent => {
       const k = itemKey(key);
       if (input.items.has(k)) return { kind: key.kind, id: key.id, ref: contentRef(key) };
       const status = input.statuses.get(k);
@@ -180,11 +180,17 @@ export function planExport(input: ExportInput): ExportPlan {
         stored.files.includes('body.html') &&
         !stored.files.includes('body.txt');
 
+      // Stored, but the latest fetch of it did not finish: what is exported is
+      // an older copy, and the reader should know.
+      const fetchStatus = input.statuses.get(k);
+      const staleness = fetchStatus === 'done' ? {} : { stale: true, fetchStatus: fetchStatus ?? 'unknown' };
+
       const body = {
         id: key.id,
         idAttribute: key.attribute,
         ...record,
         ...(derivedText ? { textDerivedFromHtml: true } : {}),
+        ...staleness,
         ...secrets,
         mergeFields,
         usedBy: refs.filter((r) => itemKey(r.key) === k).map((r) => r.use),

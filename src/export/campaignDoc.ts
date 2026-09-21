@@ -1,5 +1,6 @@
 import { contentRefsOf } from '../content/collect.js';
-import type { ContentItemKey, ContentKind, StepVersion } from '../content/types.js';
+import { REDACTED, SECRET_NAME_PATTERN } from '../content/redact.js';
+import { type ContentItemKey, type ContentKind, type StepVersion, itemKey } from '../content/types.js';
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { NormalizedNode } from '../normalize/nodes.js';
 import { stripLongSuffix } from '../parse/cells.js';
@@ -7,9 +8,18 @@ import type { CampaignSummary } from '../parse/campaignList.js';
 import { htmlToText } from './htmlText.js';
 import { findMergeFields } from './mergeFields.js';
 
-export type ContentPointer =
+/** Where one piece of content is in the export, or why it is not there. */
+export type ResolvedContent =
   | { kind: ContentKind; id: string; ref: string }
   | { kind: ContentKind; id: string; status: 'failed' | 'notFound' | 'notFetched' };
+
+/**
+ * A step's content, tagged with the version that uses it: `both` when the cell
+ * points at it in draft and published alike, `draft` or `published` when the
+ * versions disagree — a step being edited can publish one email and draft
+ * another, and the migrator needs to see both.
+ */
+export type ContentPointer = ResolvedContent & { version: StepVersion };
 
 export interface TaskDoc {
   title: string | null;
@@ -70,33 +80,54 @@ export interface CampaignDocInput {
   normalized: NormalizedCampaign;
   summary: CampaignSummary | null;
   publishNodes: NormalizedNode[];
-  resolve: (key: ContentItemKey) => ContentPointer;
+  resolve: (key: ContentItemKey) => ResolvedContent;
 }
 
-/** Status and bookkeeping attributes: nothing a migrator rebuilds. */
+/**
+ * Status and bookkeeping attributes: nothing a migrator rebuilds.
+ *
+ * This differs from normalize's STATUS_KEYS on purpose. STATUS_KEYS decides
+ * whether a node counts as "unconfigured", so it ignores settings such as a
+ * goal's achievementType that every node carries by default. Here those stay:
+ * achievementType is a real goal setting the migrator has to reproduce.
+ */
 const HIDDEN_CONFIG = new Set([
   'initialized', 'deepCopy', 'global', 'name', 'ready', 'published', 'broken',
   'appName', 'buildNumber', 'funnelId',
 ]);
 
 const STRUCTURAL = new Set(['flow', 'edge', 'start', '(none)']);
-const NOTE_STYLES = new Set(['notes', 'note']);
+/**
+ * A canvas note — text on the canvas, not a step. The `note` style is the
+ * Apply Note step: it carries a marketingNoteId and lives in a sequence, even
+ * though normalize also files it under `notes`.
+ */
+const CANVAS_NOTE = 'notes';
 
-/** Every node of the draft, in document-ish order: goals, sequences and their steps, decisions, notes. */
+/**
+ * Every node of the draft, once each, in document-ish order: goals, sequences
+ * and their steps, decisions, notes. (Apply Note steps appear both in their
+ * sequence and in `notes`; the sequence copy wins.)
+ */
 export function draftNodesOf(campaign: NormalizedCampaign): NormalizedNode[] {
+  const seen = new Set<string>();
   return [
     ...campaign.goals,
     ...campaign.sequences.flatMap((sequence) => [sequence, ...sequence.steps]),
     ...campaign.decisions,
     ...campaign.notes,
-  ];
+  ].filter((node) => {
+    if (seen.has(node.cellId)) return false;
+    seen.add(node.cellId);
+    return true;
+  });
 }
 
 function settingsOf(node: NormalizedNode): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(node.config)) {
     if (HIDDEN_CONFIG.has(key) || (node.style === 'task' && key.startsWith('task'))) continue;
-    out[key] = value;
+    out[key] = SECRET_NAME_PATTERN.test(key) && value.trim() !== '' ? REDACTED : value;
   }
   return out;
 }
@@ -129,10 +160,36 @@ function taskOf(node: NormalizedNode): TaskDoc | undefined {
   };
 }
 
+/**
+ * The union of what a cell points at in each version: draft order first, then
+ * whatever only the published version points at.
+ */
+function contentOf(
+  draft: NormalizedNode | null,
+  published: NormalizedNode | null,
+  resolve: CampaignDocInput['resolve'],
+): ContentPointer[] {
+  const keysOf = (node: NormalizedNode | null): ContentItemKey[] =>
+    node === null ? [] : contentRefsOf([node]).map(({ key }) => key);
+  const draftKeys = keysOf(draft);
+  const publishedKeys = keysOf(published);
+  const inDraft = new Set(draftKeys.map(itemKey));
+  const inPublished = new Set(publishedKeys.map(itemKey));
+  return [
+    ...draftKeys.map((key): ContentPointer => ({
+      ...resolve(key),
+      version: inPublished.has(itemKey(key)) ? 'both' : 'draft',
+    })),
+    ...publishedKeys
+      .filter((key) => !inDraft.has(itemKey(key)))
+      .map((key): ContentPointer => ({ ...resolve(key), version: 'published' })),
+  ];
+}
+
 function stepDoc(
   node: NormalizedNode,
   version: StepVersion,
-  resolve: CampaignDocInput['resolve'],
+  content: ContentPointer[],
 ): StepDoc {
   const doc: StepDoc = {
     cellId: node.cellId,
@@ -140,7 +197,7 @@ function stepDoc(
     name: node.name,
     version,
     settings: settingsOf(node),
-    content: contentRefsOf([node]).map(({ key }) => resolve(key)),
+    content,
   };
   const task = taskOf(node);
   if (task) doc.task = task;
@@ -149,9 +206,15 @@ function stepDoc(
 
 export function buildCampaignDoc(input: CampaignDocInput): CampaignDoc {
   const { normalized, publishNodes, resolve } = input;
-  const publishedIds = new Set(publishNodes.map((n) => n.cellId));
-  const versionOf = (cellId: string): StepVersion => (publishedIds.has(cellId) ? 'both' : 'draft');
+  const publishedById = new Map(publishNodes.map((n) => [n.cellId, n]));
+  const versionOf = (cellId: string): StepVersion => (publishedById.has(cellId) ? 'both' : 'draft');
   const draftIds = new Set(draftNodesOf(normalized).map((n) => n.cellId));
+  const draftStep = (node: NormalizedNode): StepDoc =>
+    stepDoc(
+      node,
+      versionOf(node.cellId),
+      contentOf(node, publishedById.get(node.cellId) ?? null, resolve),
+    );
 
   const sequences: SequenceDoc[] = normalized.sequences.map((sequence) => ({
     cellId: sequence.cellId,
@@ -160,7 +223,7 @@ export function buildCampaignDoc(input: CampaignDocInput): CampaignDoc {
     orderVerified: sequence.orderVerified,
     steps: sequence.steps
       .filter((step) => step.style !== 'start')
-      .map((step) => ({ ...stepDoc(step, versionOf(step.cellId), resolve), position: step.position })),
+      .map((step) => ({ ...draftStep(step), position: step.position })),
   }));
 
   const decisions: DecisionDoc[] = normalized.decisions.map((decision) => ({
@@ -171,10 +234,10 @@ export function buildCampaignDoc(input: CampaignDocInput): CampaignDoc {
   }));
 
   const publishedOnly = publishNodes
-    .filter((n) => !draftIds.has(n.cellId) && !STRUCTURAL.has(n.style) && !NOTE_STYLES.has(n.style))
-    .map((n) => stepDoc(n, 'published', resolve));
+    .filter((n) => !draftIds.has(n.cellId) && !STRUCTURAL.has(n.style) && n.style !== CANVAS_NOTE)
+    .map((n) => stepDoc(n, 'published', contentOf(null, n, resolve)));
 
-  const canvasNotes = normalized.notes.map((note) => ({
+  const canvasNotes = normalized.notes.filter((n) => n.style === CANVAS_NOTE).map((note) => ({
     cellId: note.cellId,
     text: htmlToText(note.config.notes ?? note.name ?? ''),
   }));
@@ -195,7 +258,7 @@ export function buildCampaignDoc(input: CampaignDocInput): CampaignDoc {
       everPublished: normalized.published,
       hasUnpublishedChanges: normalized.hasUnpublishedChanges,
     },
-    goals: normalized.goals.map((goal) => stepDoc(goal, versionOf(goal.cellId), resolve)),
+    goals: normalized.goals.map(draftStep),
     sequences,
     decisions,
     publishedOnly,
