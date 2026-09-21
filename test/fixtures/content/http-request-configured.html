@@ -1,0 +1,148 @@
+<div id="wrapper_httpRequest" class="whole-page-editor-wrapper">
+    <div id="httpRequest" class="padded-whole-page-editor">
+        <!-- Hidden Properties for JS -->
+    <input type="hidden" id="httpRequestConfigId" value="5">
+
+
+    <!-- Summary Heading and Description -->
+    <div class="httpRequestSummaryTitle">
+        <label for="httpRequestTargetUrl">Summary</label></div>
+    <div class="httpRequestSummaryDescription">
+        <label for="httpRequestTargetUrl">You can use Http requests to send data to any compliant server.</label></div>
+
+
+    <!-- Post type drop down, and target URL input -->
+        <table id="methodAndUrl">
+            <tr>
+                <td>
+                    <div class="httpRequestType">
+                        <select class="inf-select is-component" id="httpRequestType" data-on="Component.Select"><option value="POST">Post</option><option value="PUT" selected="selected">Put</option><option value="PATCH">Patch</option><option value="DELETE">Delete</option></select></div>
+                </td>
+
+                <td>
+                    <!-- Target URL field -->
+                    <table class="formField">
+                        <tr>
+                            <td>
+                                <input class="web-hook-url xxlarge" id="targetUrl" name="targetUrl" type="text" value="https://hooks.example.com/contacts/~Contact.Id~" placeholder="Target URL" /></td>
+                            <td>
+                                <input onclick="Infusion.Funnel.Flow.HttpRequest.showMergeFields()" class="inf-button btn" id="mergeFields_subject" type="submit" value="Merge" /></td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+
+    <!-- List and edit Query parameters -->
+    <div class="paramList-QUERY">
+        <div class="paramTitle">
+                Query Parameters</div>
+        <table id="paramTable-QUERY" class="web-hook"> <tr class="parameter-table-line-item"> <td class="http-request-param-name"> <input type="text" value="source"/> </td> <td class="http-request-param-value"> <input type="text" value="keap"/> </td> <td class="http-request-param-remove"> <input class="removeParameterRowButton" type="image" src="/slices/trash.png"/> </td> </tr> <tr class="parameter-table-line-item"> <td class="http-request-param-name"> <input type="text" value="api_key"/> </td> <td class="http-request-param-value"> <input type="text" value="EXAMPLE_KEY_123"/> </td> <td class="http-request-param-remove"> <input class="removeParameterRowButton" type="image" src="/slices/trash.png"/> </td> </tr>
+            <tr id="addRow">
+            </tr>
+
+            <tr>
+                <td colspan="3" class="parameter-add-column">
+                <span class="parameter-add" id="addQueryParam"
+                      onclick="addQueryParam('QUERY', 5)">
+                    + Query Parameter</span>
+                </td>
+            </tr>
+
+
+        </table>
+        <div class="divider"></div>
+    </div>
+
+    <!-- List and edit Header parameters -->
+    <div class="paramList-HEADER">
+        <div class="paramTitle">
+                Header</div>
+        <table id="paramTable-HEADER" class="web-hook"> <tr class="parameter-table-line-item"> <td class="http-request-param-name"> <input type="text" value="Authorization"/> </td> <td class="http-request-param-value"> <input type="text" value="Bearer EXAMPLE_TOKEN"/> </td> <td class="http-request-param-remove"> <input class="removeParameterRowButton" type="image" src="/slices/trash.png"/> </td> </tr> <tr class="parameter-table-line-item"> <td class="http-request-param-name"> <input type="text" value="Content-Type"/> </td> <td class="http-request-param-value"> <input type="text" value="application/json"/> </td> <td class="http-request-param-remove"> <input class="removeParameterRowButton" type="image" src="/slices/trash.png"/> </td> </tr>
+            <tr id="addRow">
+            </tr>
+
+            <tr>
+                <td colspan="3" class="parameter-add-column">
+                <span class="parameter-add" id="addHeaderParam"
+                      onclick="addQueryParam('HEADER', 5)">
+                    + Add Header Parameter</span>
+                </td>
+            </tr>
+
+
+        </table>
+        <div class="divider"></div>
+    </div>
+
+    <div class="paramList-BODY">
+        <div class="paramTitle">
+                Body</div>
+        <table id="paramTable-BODY" class="web-hook">
+            <tr>
+                <td>
+                    <textarea class="http-request-body" id="http-request-body" name="http-request-body">{&quot;email&quot;:&quot;~Contact.Email~&quot;}</textarea></td>
+            </tr>
+        </table>
+    </div>
+    <div class="divider"></div>
+
+
+<div id="testingTable">
+    <table id="http-request-testing">
+        <tr>
+            <td>
+                <label for="httpRequestTestRequest">Request</label><div id="http-request-testing-request">
+                    <textarea class="requestText" id="http-request-testing-request-text" disabled="true" name="http-request-testing-request-text"></textarea></div>
+            </td>
+            <td>
+
+                <label for="httpRequestTestResponse">Response</label><div id="http-request-testing-response">
+                    <textarea class="responseText" id="http-request-testing-response-text" disabled="false" name="http-request-testing-response-text"></textarea></div>
+            </td>
+        </tr>
+    </table>
+</div>
+
+</div>
+</div>
+
+<style type="text/css">
+
+    #wrapper_httpRequest {
+        width: 100%;
+        background: none repeat scroll 0 0 #F5F5F5;
+        border-bottom: 1px solid #CCCCCC;
+    }
+
+    #httpRequest {
+        width: 960px;
+        margin: 0 auto;
+    }
+
+</style><script type="text/javascript">
+    function addQueryParam(paramType, httpRequestConfigId) {
+        Infusion.Funnel.Flow.HttpRequest.addParam(paramType, httpRequestConfigId)
+    }
+
+</script>
+
+<script type="text/javascript">Infusion.ready(function() {
+                
+    Infusion.Funnel.Flow.HttpRequest.initParameters();
+
+            });</script><template id="newParameterRowTemplate">
+    <tr class="parameter-table-line-item">
+        <td class="http-request-param-name">
+            <input type="text"/>
+        </td>
+        <td class="http-request-param-value">
+            <input type="text"/>
+        </td>
+        <td class="http-request-param-remove">
+            <input class="removeParameterRowButton" type="image"
+                   src="/slices/trash.png"/>
+        </td>
+    </tr>
+</template>

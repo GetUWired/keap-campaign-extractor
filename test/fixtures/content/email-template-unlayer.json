@@ -1,0 +1,14 @@
+{
+  "id": 2415,
+  "piece_title": "EM1~br~Initial Notification",
+  "categories": null,
+  "from_address": "\"~Owner.FirstName~ ~Owner.LastName~\" <~Owner.Email~>",
+  "to_address": "~Contact.Email~",
+  "cc_address": "",
+  "bcc_address": "",
+  "subject": "Your payment failed",
+  "text_body": null,
+  "html_body": "<!DOCTYPE html><html><body><p>Please update your card.</p></body></html>",
+  "content_type": "HTML",
+  "merge_context": "Contact"
+}

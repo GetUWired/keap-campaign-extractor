@@ -1,0 +1,65 @@
+<div id="wrapper_note" class="whole-page-editor-wrapper">
+    <div id="note" class="padded-whole-page-editor">
+        <table cellpadding="2px" class="modal-body">
+    <tr>
+        <td class="formLabel">
+            <label for="Open_Merge_Window">Merge Fields</label></td>
+        <td>
+            <input onclick="Infusion.Funnel.Flow.Note.popMergeFields()" class="inf-button btn" id="mergeFields_subject" type="submit" value="Merge" /></td>
+    </tr>
+    <tr>
+        <td class="formLabel">
+            Action Type *
+        </td>
+        <td>
+            <!-- Have to un-escape HTML before escaping due to data issue - It may or may not be HTML encoded already in the database depending on how it was added. -->
+            <select class="inf-select is-component" id="actionType" data-on="Component.Select"><option value="">Please select one</option><option>Call</option><option>Email</option><option>Appointment</option><option>Fax</option><option>Letter</option><option>Other</option><option selected="selected">UPDATE</option><option>Account Update</option><option>Reservation Update</option><option>Payment Arrangement</option><option>Dietary Notices</option><option>Roommate Update</option><option>Request for Flight Information</option><option>Helpdesk Ticket</option><option>Text Conversation via PlusThis</option><option>New Trip PURCHASED TODAY - Verify!</option><option>Opted out via PDF download request to receive emails from TD</option></select></td>
+    </tr>
+    <tr>
+        <td class="formLabel">
+            Title *
+        </td>
+        <td>
+            <!-- Have to un-escape HTML before escaping due to data issue - It may or may not be HTML encoded already in the database depending on how it was added. -->
+            <input id="actionDescription" type="text" value="Purchased - Example Trip Kickoff" /></td>
+    </tr>
+    <tr>
+        <td class="formLabel">
+            Description</td>
+        <td>
+            <textarea class="textAreaWidth" id="creationNotes">Call ~Contact.FirstName~ about the deposit &amp; flights.</textarea></td>
+    </tr>
+    <tr>
+            <td class="formLabel">
+                Notify</td>
+            <td>
+                <select allowSingleDeselect="false" data-placeholder="Please select a User" displayTagCreate="false" noResultsText="No results matched" class="inf-select is-component  inf-invisible" id="notifyUsers" name="notifyUsers" multiple="multiple" data-on="Component.Select"><option value="751357L">User 1</option><option value="945331L">User 2</option><option value="747251L">User 3</option><option value="231574L">User 4</option><option value="177510L">User 5</option><option value="944747L">User 6</option><option value="90775L">User 7</option><option value="562318L">User 8</option><option value="514078L">User 9</option><option value="951850L">User 10</option><option value="754755L">User 11</option><option value="837663L">User 12</option><option selected="selected" value="336317L">User 13</option><option selected="selected" value="504756L">User 14</option><option value="505050L">User 15</option><option value="154333L">User 16</option><option value="460204L">User 17</option><option value="503126L">User 18</option><option value="1L">User 19</option><option value="368222L">User 20</option><option value="693041L">User 21</option></select><input id="notifyUsers-hiddenWidth" name="notifyUsers-hiddenWidth" type="hidden" value="" /><script type="text/javascript">Infusion.on("Component.SelectChosen").exec(function() {
+                
+
+    Infusion.Component.SelectChosen.init('notifyUsers');
+
+            });</script></td>
+        </tr>
+        <tr>
+                <td colspan="2">
+                    <input id="assignmentUserId" type="hidden" value="systemUserId" /></td>
+            </tr>
+        </table>
+
+</div>
+</div>
+
+<style type="text/css">
+
+    #wrapper_note {
+        width: 100%;
+        background: none repeat scroll 0 0 #F5F5F5;
+        border-bottom: 1px solid #CCCCCC;
+    }
+
+    #note {
+        width: 960px;
+        margin: 0 auto;
+    }
+
+</style>

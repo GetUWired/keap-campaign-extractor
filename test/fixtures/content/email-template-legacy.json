@@ -1,0 +1,14 @@
+{
+  "id": 1261,
+  "piece_title": "Untitled Email",
+  "categories": null,
+  "from_address": "\"Example Sender\" <sender@example.com>",
+  "to_address": "~Contact.Email~",
+  "cc_address": "",
+  "bcc_address": "records@example.com",
+  "subject": "Hi ~Contact.FirstName~",
+  "text_body": "This email was sent as HTML-only.  To view it, please visit:\n~HostedEmail.Url~",
+  "html_body": "<div id=\"mainContent\"><p>Hi ~Contact.FirstName~,</p><img src=\"https://example.infusionsoft.com/images/logo.png\"></div>",
+  "content_type": "MULTIPART",
+  "merge_context": "Contact"
+}

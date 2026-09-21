@@ -1,0 +1,7 @@
+{
+  "webforms": [
+    {"id": "3", "xid": "c04f92b646da7cdee441919dbdd8de29", "name": "E-mail Opt-Out Form", "funnel_id": null, "custom_slug": "e-mail-opt-out-form", "webform_url": "https://example.infusionsoft.com/app/form/c04f92b646da7cdee441919dbdd8de29", "pretty_webform_url": "https://example.infusionsoft.com/app/form/e-mail-opt-out-form", "thank_you_page_url": null, "duplicate_check_option": "EMAIL", "exit_option": "MESSAGE", "webform_type": "LEGACY", "create_time": "2016-10-18T01:06:27Z", "update_time": "2020-08-04T18:57:48Z"},
+    {"id": "5", "xid": "933be0bce44888029d76a647dbd42673", "name": "Test Form", "funnel_id": null, "custom_slug": "test-form", "webform_url": "https://example.infusionsoft.com/app/form/933be0bce44888029d76a647dbd42673", "pretty_webform_url": null, "thank_you_page_url": "https://example.com/thanks", "duplicate_check_option": "EMAIL_AND_NAME", "exit_option": "REDIRECT", "webform_type": "LEGACY", "create_time": "2016-10-18T01:06:27Z", "update_time": "2019-08-13T21:28:52Z"}
+  ],
+  "next_page_token": null
+}

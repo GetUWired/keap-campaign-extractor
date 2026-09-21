@@ -1,0 +1,14 @@
+{
+  "id": 3001,
+  "piece_title": "Plain reminder",
+  "categories": null,
+  "from_address": "sender@example.com",
+  "to_address": "~Contact.Email~",
+  "cc_address": "",
+  "bcc_address": "",
+  "subject": "Reminder",
+  "text_body": "Hi ~Contact.FirstName~, see you tomorrow.",
+  "html_body": "",
+  "content_type": "TEXT",
+  "merge_context": "Contact"
+}
