@@ -1252,3 +1252,31 @@ Other observations:
 Still open: a configured HTTP Request to confirm the parser; what an expired session returns from
 the `/app/` endpoints; whether webformIds absent from the v2 list are deleted, archived or a type the
 list omits.
+
+### Legacy web forms are not in the API (2026-09-21, se232)
+
+A full walk of `GET /crm/rest/v2/webforms` (one page, no `next_page_token`) returned 62 forms —
+`FUNNEL` 50, `INTERNAL` 8, `LANDING_PAGE` 3, `STANDALONE` 1 — and **no `LEGACY` forms**. Five
+webformIds referenced by se232 campaigns (336, 390, 409, 425, 429) are absent; the operator confirmed
+in Keap that all five exist:
+
+| Form | State in Keap |
+|---|---|
+| 336 | legacy form, in use (Waitlist) |
+| 390 | never customised or set up |
+| 409 | set up, not published |
+| 425 | set up and published |
+| 429 | set up and customised, not marked ready, not connected on the graph |
+
+`/crm/rest/v1/webforms`, `/v1/webforms/{id}`, `/v1/webforms/{id}/html` and `/v2/webforms/{id}` all
+return 404 with body `{"message":"","spaApp":false}` — the Keap app's own "no such route", not the
+API gateway's. There is no REST path to a legacy web form. (On `jordan` the same list did include
+`LEGACY` entries, so what the list covers differs between accounts.)
+
+The builder's scripts show the only other routes are the POST-loaded hot-swap editor and a full-page
+`/app/webformFunnel/standaloneEditor?contentType=webform&parentId=…` editor — both editors, not
+read endpoints, and not pursued. `/app/webformSubmission/…` endpoints return contacts' submissions and
+are out of bounds.
+
+Consequence: legacy web forms referenced by campaigns are recorded as `failed` with a reason naming
+the gap; they must be rebuilt by hand from Keap.
