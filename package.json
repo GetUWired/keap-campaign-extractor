@@ -13,6 +13,7 @@
     "extract-all": "tsx src/cli/extractAll.ts",
     "normalize": "tsx src/cli/normalize.ts",
     "enrich": "tsx src/cli/enrich.ts",
+    "fetch-content": "tsx src/cli/fetchContent.ts",
     "render": "tsx src/cli/render.ts",
     "tag-impact": "tsx src/cli/tagImpact.ts",
     "test": "vitest run",
