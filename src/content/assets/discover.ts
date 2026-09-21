@@ -28,8 +28,12 @@ export interface DiscoveredAssets {
  */
 export const KEAP_HOST_SUFFIXES = ['infusionsoft.com', 'infusionsoft.app', 'keap.com', 'keap.app'];
 
-/** Keap-hosted link paths that serve a file rather than a page. */
-export const KEAP_FILE_PATHS: RegExp[] = [/\/download/i, /\/files?\//i, /\/storage\//i];
+/**
+ * Keap-hosted link paths that serve a file rather than a page. Matched as a
+ * whole path segment, so `/Download?Id=4` and `/files/brochure.pdf` download
+ * while a page such as `/en/downloadable-report` stays a link.
+ */
+export const KEAP_FILE_PATHS: RegExp[] = [/^\/(?:.*\/)?(?:download|files?|storage)(?:\/|$)/i];
 
 const FILE_EXTENSION =
   /\.(pdf|docx?|xlsx?|pptx?|csv|txt|rtf|zip|mp3|mp4|mov|png|jpe?g|gif|webp|svg)$/i;
@@ -48,7 +52,6 @@ export function isKeapHosted(url: string): boolean {
 }
 
 function isPrivateIPv4(ip: string): boolean {
-  if (ip === '255.255.255.255') return true;
   const octets = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
   if (!octets) return false;
   const a = Number(octets[1]);
@@ -60,9 +63,14 @@ function isPrivateIPv4(ip: string): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127)
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 198 && (b === 18 || b === 19)) || // 198.18.0.0/15 benchmarking
+    a >= 224 // 224.0.0.0/4 multicast, 240.0.0.0/4 reserved (incl. broadcast)
   );
 }
+
+const ipv4FromGroups = (high: number, low: number): string =>
+  `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
 
 /**
  * Expands an IPv6 literal (already validated by `net.isIP`) into eight
@@ -105,28 +113,25 @@ function expandIPv6(ip: string): number[] | null {
   return groups;
 }
 
+/**
+ * An allowlist, failing closed: only global unicast (2000::/3) can be public.
+ * `::`, `::1`, IPv4-compatible `::/96`, NAT64 `64:ff9b::/96`, unique-local,
+ * link-local, multicast and anything unparseable are all private.
+ */
 function isPrivateIPv6(ip: string): boolean {
+  // A zone id (`fe80::1%eth0`) only ever names a local interface.
+  if (ip.includes('%')) return true;
   const groups = expandIPv6(ip);
-  if (!groups) return false;
+  if (!groups) return true;
   const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = groups;
 
-  if (groups.every((g) => g === 0)) return true; // ::
-  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && g6 === 0 && g7 === 1) {
-    return true; // ::1
-  }
-  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
-  if ((g0 & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
-
   if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
-    // IPv4-mapped ::ffff:0:0/96
-    const a = (g6 >> 8) & 0xff;
-    const b = g6 & 0xff;
-    const c = (g7 >> 8) & 0xff;
-    const d = g7 & 0xff;
-    return isPrivateIPv4(`${a}.${b}.${c}.${d}`);
+    // IPv4-mapped ::ffff:0:0/96 — the IPv4 rule decides.
+    return isPrivateIPv4(ipv4FromGroups(g6, g7));
   }
-
+  if ((g0 & 0xe000) !== 0x2000) return true; // outside 2000::/3
+  if (g0 === 0x2001 && g1 === 0x0db8) return true; // 2001:db8::/32 documentation
+  if (g0 === 0x2002) return isPrivateIPv4(ipv4FromGroups(g1, g2)); // 6to4 wraps an IPv4
   return false;
 }
 

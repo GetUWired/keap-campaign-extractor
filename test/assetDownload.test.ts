@@ -1,14 +1,24 @@
+import type { LookupAddress } from 'node:dns';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { type IncomingHttpHeaders, type Server, createServer } from 'node:http';
+import { type AddressInfo, isIP } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BrowserContext } from 'playwright';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { assetFilePathFor, createAssetLedger } from '../src/content/assets/assetStore.js';
 import {
   type AssetFetcher,
   type AssetResponse,
+  AssetTooLargeError,
+  type ConnectLookup,
+  type DnsLookup,
   anonymousFetcher,
+  anonymousGet,
+  createGuardedLookup,
   downloadAsset,
   extensionFor,
+  sessionFetcher,
 } from '../src/content/assets/download.js';
 import { SessionExpiredError } from '../src/errors.js';
 
@@ -109,6 +119,34 @@ describe('downloadAsset', () => {
     ).rejects.toThrow(/expired/);
   });
 
+  it('upgrades a plain-http Keap URL to https before sending the session', async () => {
+    const keap = recording(respond('k'));
+    const { record } = await downloadAsset('http://se232.infusionsoft.com/a.png', {
+      keap: keap.fetcher,
+      anonymous: recording(respond('')).fetcher,
+    });
+    expect(keap.calls).toEqual(['https://se232.infusionsoft.com/a.png']);
+    expect(record.status).toBe('downloaded');
+  });
+
+  it('refuses to store an HTML page Keap returned in place of a file', async () => {
+    const { record, bytes } = await downloadAsset('https://se232.infusionsoft.com/Download?Id=4', {
+      keap: recording(respond('<html></html>', { contentType: 'text/html; charset=utf-8' })).fetcher,
+      anonymous: recording(respond('')).fetcher,
+    });
+    expect(record).toMatchObject({ status: 'failed', reason: 'Keap returned an HTML page, not a file' });
+    expect(record.file).toBeUndefined();
+    expect(bytes).toBeNull();
+  });
+
+  it('still stores HTML fetched anonymously from a third-party host', async () => {
+    const { record } = await downloadAsset('https://cdn.example.com/page.html', {
+      keap: recording(respond('')).fetcher,
+      anonymous: recording(respond('<html></html>', { contentType: 'text/html' })).fetcher,
+    });
+    expect(record.status).toBe('downloaded');
+  });
+
   describe('redirects', () => {
     it('skips a redirect to a private address without following it', async () => {
       const anonymous = recording(redirect('http://127.0.0.1/x'));
@@ -171,54 +209,208 @@ describe('downloadAsset', () => {
   });
 });
 
-const publicResolve = async () => [{ address: '93.184.216.34', family: 4 }];
+type LookupCallback = (
+  error: NodeJS.ErrnoException | null,
+  address: string | LookupAddress[],
+  family?: number,
+) => void;
 
-describe('anonymousFetcher', () => {
-  it('stops reading once the body passes the limit', async () => {
-    const fakeFetch = (async () =>
-      new Response('0123456789abcdef', {
-        status: 200,
-        headers: { 'content-type': 'text/plain' },
-      })) as typeof fetch;
-    const response = await anonymousFetcher(8, 1000, fakeFetch, publicResolve)(
-      'https://cdn.example.com/a.txt',
+/** A dns.lookup stand-in that always answers with the given addresses. */
+function stubLookup(...addresses: string[]): DnsLookup {
+  return (_hostname, _options, callback) =>
+    callback(
+      null,
+      addresses.map((address) => ({ address, family: isIP(address) })),
     );
-    await expect(response.body()).rejects.toThrow(/exceeds/);
+}
+
+/** Runs the guarded lookup and captures exactly what it hands the socket. */
+function runGuarded(lookup: DnsLookup, all: boolean) {
+  return new Promise<{ error: Error | null; address: unknown; family: unknown }>((resolve) => {
+    const cb: LookupCallback = (error, address, family) => resolve({ error, address, family });
+    createGuardedLookup(lookup)('cdn.example.com', { all }, cb);
+  });
+}
+
+describe('createGuardedLookup', () => {
+  it('passes a public answer through in the all: true form', async () => {
+    const result = await runGuarded(stubLookup('93.184.216.34', '2606:4700::1111'), true);
+    expect(result.error).toBeNull();
+    expect(result.address).toEqual([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:4700::1111', family: 6 },
+    ]);
   });
 
-  it('sends no cookie or key headers, and follows no redirect itself', async () => {
-    let seen: RequestInit | undefined;
-    const fakeFetch = (async (_url: string, init?: RequestInit) => {
-      seen = init;
-      return new Response('x');
-    }) as typeof fetch;
-    await anonymousFetcher(8, 1000, fakeFetch, publicResolve)('https://cdn.example.com/a.txt');
-    expect(seen?.headers).toBeUndefined();
-    expect(seen?.method).toBe('GET');
-    expect(seen?.redirect).toBe('manual');
+  it('passes a public answer through in the single-address form', async () => {
+    const result = await runGuarded(stubLookup('93.184.216.34'), false);
+    expect(result).toEqual({ error: null, address: '93.184.216.34', family: 4 });
   });
 
-  it('refuses a hostname whose DNS resolves to a private address, without making the request', async () => {
-    let fetchCalled = false;
-    const fakeFetch = (async () => {
-      fetchCalled = true;
-      return new Response('x');
-    }) as typeof fetch;
-    const resolve = async () => [{ address: '10.0.0.5', family: 4 }];
+  it('refuses when any address is private', async () => {
+    const result = await runGuarded(stubLookup('93.184.216.34', '10.0.0.5'), false);
+    expect(result.error?.message).toBe(
+      'refused: cdn.example.com resolves to a private address 10.0.0.5',
+    );
+  });
+
+  it('refuses an empty answer', async () => {
+    const result = await runGuarded(stubLookup(), true);
+    expect(result.error?.message).toMatch(/^refused: cdn\.example\.com/);
+  });
+
+  it('passes a DNS error through', async () => {
+    const failing: DnsLookup = (_h, _o, callback) =>
+      callback(Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }), []);
+    const result = await runGuarded(failing, true);
+    expect(result.error?.message).toMatch(/ENOTFOUND/);
+  });
+});
+
+describe('anonymous transport against a local server', () => {
+  let server: Server;
+  let port: number;
+  let connections: number;
+  let seenHeaders: IncomingHttpHeaders[];
+
+  beforeEach(async () => {
+    connections = 0;
+    seenHeaders = [];
+    server = createServer((req, res) => {
+      seenHeaders.push(req.headers);
+      if (req.url === '/big') {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end('0123456789abcdef');
+      } else if (req.url === '/moved') {
+        res.writeHead(302, { location: 'http://127.0.0.1/elsewhere' });
+        res.end();
+      } else {
+        res.writeHead(200, { 'content-type': 'image/png', 'content-length': '2' });
+        res.end('ok');
+      }
+    });
+    server.on('connection', () => connections++);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = (server.address() as AddressInfo).port;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('refuses a hostname that rebinds to 127.0.0.1, and never connects', async () => {
     await expect(
-      anonymousFetcher(8, 1000, fakeFetch, resolve)('https://cdn.example.com/a.txt'),
-    ).rejects.toThrow(/refused: cdn\.example\.com resolves to a private address/);
-    expect(fetchCalled).toBe(false);
+      anonymousFetcher(1024, 2000, stubLookup('127.0.0.1'))(`http://rebind.test:${port}/`),
+    ).rejects.toThrow('refused: rebind.test resolves to a private address 127.0.0.1');
+    expect(connections).toBe(0);
   });
 
-  it('makes the request with redirect: manual when DNS resolves to a public address', async () => {
-    let seen: RequestInit | undefined;
-    const fakeFetch = (async (_url: string, init?: RequestInit) => {
-      seen = init;
-      return new Response('x');
-    }) as typeof fetch;
-    await anonymousFetcher(8, 1000, fakeFetch, publicResolve)('https://cdn.example.com/a.txt');
-    expect(seen?.redirect).toBe('manual');
+  it('refuses a private IP literal without resolving or connecting', async () => {
+    let looked = false;
+    const lookup: DnsLookup = (_h, _o, callback) => {
+      looked = true;
+      callback(null, [{ address: '93.184.216.34', family: 4 }]);
+    };
+    await expect(anonymousFetcher(1024, 2000, lookup)(`http://127.0.0.1:${port}/`)).rejects.toThrow(
+      /refused: 127\.0\.0\.1/,
+    );
+    expect(looked).toBe(false);
+    expect(connections).toBe(0);
+  });
+
+  // The transport below has no address guard of its own (anonymousFetcher adds
+  // it), which is what lets it reach 127.0.0.1 here.
+  const direct: ConnectLookup = (_hostname, options, callback) =>
+    options.all
+      ? callback(null, [{ address: '127.0.0.1', family: 4 }])
+      : callback(null, '127.0.0.1', 4);
+
+  it('sends no cookie, authorization or key header', async () => {
+    const response = await anonymousGet(`http://assets.test:${port}/a.png`, direct, 2000, 1024);
+    expect((await response.body()).toString()).toBe('ok');
+    expect(response).toMatchObject({ status: 200, contentType: 'image/png', contentLength: 2 });
+    const headers = seenHeaders[0] ?? {};
+    expect(headers.cookie).toBeUndefined();
+    expect(headers.authorization).toBeUndefined();
+    expect(Object.keys(headers).filter((name) => /key|token|auth/i.test(name))).toEqual([]);
+  });
+
+  it('stops reading once the body passes the limit', async () => {
+    const response = await anonymousGet(`http://assets.test:${port}/big`, direct, 2000, 8);
+    await expect(response.body()).rejects.toBeInstanceOf(AssetTooLargeError);
+  });
+
+  it('returns a redirect without following it', async () => {
+    const response = await anonymousGet(`http://assets.test:${port}/moved`, direct, 2000, 1024);
+    expect(response.status).toBe(302);
+    expect(response.location).toBe('http://127.0.0.1/elsewhere');
+    expect(seenHeaders).toHaveLength(1);
+  });
+});
+
+/** A BrowserContext whose request.get answers every URL with one stub response. */
+function fakeContext(stub: { status: number; url: string; headers?: Record<string, string>; body?: string }) {
+  const requested: string[] = [];
+  const context = {
+    request: {
+      get: async (url: string) => {
+        requested.push(url);
+        return {
+          status: () => stub.status,
+          url: () => stub.url,
+          headers: () => stub.headers ?? {},
+          body: async () => Buffer.from(stub.body ?? ''),
+        };
+      },
+    },
+  } as unknown as BrowserContext;
+  return { context, requested };
+}
+
+describe('sessionFetcher', () => {
+  it('treats a redirect to the sign-in page as session expiry', async () => {
+    const { context } = fakeContext({
+      status: 302,
+      url: 'https://se232.infusionsoft.com/Download?Id=4',
+      headers: { location: 'https://signin.infusionsoft.com/login?service=x' },
+    });
+    await expect(
+      sessionFetcher(context)('https://se232.infusionsoft.com/Download?Id=4'),
+    ).rejects.toBeInstanceOf(SessionExpiredError);
+  });
+
+  it('treats a relative redirect to /login as session expiry', async () => {
+    const { context } = fakeContext({
+      status: 302,
+      url: 'https://se232.infusionsoft.com/Download?Id=4',
+      headers: { location: '/app/login' },
+    });
+    await expect(
+      sessionFetcher(context)('https://se232.infusionsoft.com/Download?Id=4'),
+    ).rejects.toThrow(/redirected to https:\/\/se232\.infusionsoft\.com\/app\/login/);
+  });
+
+  it('returns an ordinary redirect for downloadAsset to route', async () => {
+    const { context } = fakeContext({
+      status: 302,
+      url: 'https://se232.infusionsoft.com/Download?Id=4',
+      headers: { location: 'https://cdn.example.com/guide.pdf' },
+    });
+    const response = await sessionFetcher(context)('https://se232.infusionsoft.com/Download?Id=4');
+    expect(response).toMatchObject({ status: 302, location: 'https://cdn.example.com/guide.pdf' });
+  });
+
+  it('downloads an asset whose own path merely contains "login"', async () => {
+    const url = 'https://se232.infusionsoft.com/images/login-button.png';
+    const { context } = fakeContext({
+      status: 200,
+      url,
+      headers: { 'content-type': 'image/png' },
+      body: 'png',
+    });
+    const response = await sessionFetcher(context)(url);
+    expect(response.status).toBe(200);
+    expect((await response.body()).toString()).toBe('png');
   });
 });
 

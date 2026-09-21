@@ -72,6 +72,10 @@ describe('isKeapHosted / isPrivateHost', () => {
     expect(isPrivateHost('[2606:4700::1111]')).toBe(false);
     expect(isPrivateHost('[::ffff:808:808]')).toBe(false);
   });
+
+  it('treats a bracketed IPv4-compatible IPv6 literal as private', () => {
+    expect(isPrivateHost('[::127.0.0.1]')).toBe(true);
+  });
 });
 
 describe('isPrivateAddress', () => {
@@ -92,7 +96,25 @@ describe('isPrivateAddress', () => {
     '0:0:0:0:0:ffff:c0a8:101',
   ])('treats %s as private', (ip) => expect(isPrivateAddress(ip)).toBe(true));
 
-  it.each(['8.8.8.8', '2606:4700::1111', '::ffff:808:808', 'fd::1', 'example.com'])(
+  // Fail closed: IPv6 is public only inside 2000::/3 (minus documentation and
+  // 6to4 wrapping a private IPv4); everything else, including odd forms like
+  // fd::1 (0x00fd, not fd00::/8), is private.
+  it.each([
+    '::127.0.0.1',
+    '64:ff9b::7f00:1',
+    '2002:7f00:1::1',
+    '2001:db8::1',
+    'ff02::1',
+    'fe80::1%eth0',
+    'fd::1',
+    '224.0.0.1',
+    '239.255.255.250',
+    '240.0.0.1',
+    '198.18.0.1',
+    '198.19.255.255',
+  ])('treats %s as private (allowlist, fail closed)', (ip) => expect(isPrivateAddress(ip)).toBe(true));
+
+  it.each(['8.8.8.8', '2606:4700::1111', '::ffff:808:808', '2002:808:808::1', '198.20.0.1', 'example.com'])(
     'treats %s as public or not an IP literal',
     (ip) => expect(isPrivateAddress(ip)).toBe(false),
   );
@@ -146,6 +168,24 @@ describe('discoverHtmlAssets', () => {
     expect(found.download).toContain('https://se232.infusionsoft.com/Download?Id=4');
     expect(found.download).toContain('https://se232.infusionsoft.com/files/brochure.pdf');
     expect(found.links).toEqual(['https://example.com/pricing', 'https://example.com/r?u=~Contact.Id~']);
+  });
+
+  it('matches Keap file paths by whole segment, so a page named like a file path stays a link', () => {
+    const page = discoverHtmlAssets(
+      `<a href="https://se232.infusionsoft.com/en/downloadable-report">Report</a>
+       <a href="https://se232.infusionsoft.com/filesharing/about">About</a>
+       <a href="https://se232.infusionsoft.com/storage/x">X</a>
+       <a href="https://se232.infusionsoft.com/app/storage">Y</a>`,
+      null,
+    );
+    expect(page.links).toEqual([
+      'https://se232.infusionsoft.com/en/downloadable-report',
+      'https://se232.infusionsoft.com/filesharing/about',
+    ]);
+    expect(page.download).toEqual([
+      'https://se232.infusionsoft.com/storage/x',
+      'https://se232.infusionsoft.com/app/storage',
+    ]);
   });
 
   it('skips tracking pixels and merge-field images', () => {

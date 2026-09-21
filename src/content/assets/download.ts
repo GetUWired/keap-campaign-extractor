@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lookup as dnsLookup } from 'node:dns/promises';
+import { type LookupAddress, type LookupOptions, lookup as dnsLookup } from 'node:dns';
+import { type IncomingMessage, get as httpGet } from 'node:http';
+import { get as httpsGet } from 'node:https';
 import { isIP } from 'node:net';
 import type { BrowserContext } from 'playwright';
-import { assertResponseAuthenticated } from '../../auth/session.js';
-import { isSessionExpired } from '../../errors.js';
+import { LOGIN_URL_PATTERN } from '../../config.js';
+import { SessionExpiredError, isSessionExpired } from '../../errors.js';
 import { safeGet } from '../../guard/readonly.js';
 import { classifyUrl, isKeapHosted, isPrivateAddress } from './discover.js';
 
@@ -21,11 +23,23 @@ export interface AssetResponse {
   body(): Promise<Buffer>;
 }
 
-/** Matches `node:dns/promises`' `lookup(hostname, { all: true })`. Injectable for tests. */
-export type DnsResolve = (
+/** The `all: true` form of `node:dns`' callback `lookup`. Injectable for tests. */
+export type DnsLookup = (
   hostname: string,
-  options: { all: true },
-) => Promise<{ address: string; family: number }[]>;
+  options: LookupOptions & { all: true },
+  callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void,
+) => void;
+
+/** What `http.get`'s `lookup` option expects (`net.LookupFunction`). */
+export type ConnectLookup = (
+  hostname: string,
+  options: LookupOptions,
+  callback: (
+    error: NodeJS.ErrnoException | null,
+    address: string | LookupAddress[],
+    family?: number,
+  ) => void,
+) => void;
 
 export type AssetFetcher = (url: string) => Promise<AssetResponse>;
 
@@ -87,6 +101,9 @@ export function extensionFor(url: string, contentType: string | null): string {
   return 'bin';
 }
 
+const isHtml = (contentType: string | null): boolean =>
+  contentType?.split(';')[0]?.trim().toLowerCase() === 'text/html';
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -111,7 +128,16 @@ export async function downloadAsset(
     let redirectCount = 0;
 
     for (;;) {
-      const fetcher = isKeapHosted(currentUrl) ? fetchers.keap : fetchers.anonymous;
+      const viaSession = isKeapHosted(currentUrl);
+      if (viaSession) {
+        // Never send the session over plain http.
+        const parsed = new URL(currentUrl);
+        if (parsed.protocol === 'http:') {
+          parsed.protocol = 'https:';
+          currentUrl = parsed.href;
+        }
+      }
+      const fetcher = viaSession ? fetchers.keap : fetchers.anonymous;
       const response = await fetcher(currentUrl);
 
       if (response.status >= 300 && response.status < 400) {
@@ -144,6 +170,14 @@ export async function downloadAsset(
       if (response.status < 200 || response.status >= 300) {
         return {
           record: { url, status: 'failed', httpStatus: response.status, reason: `HTTP ${response.status}` },
+          bytes: null,
+        };
+      }
+      if (viaSession && isHtml(response.contentType)) {
+        // A file link that answers with a page is a login screen, an error page
+        // or a landing page — not the file, and not something to store.
+        return {
+          record: { url, status: 'failed', reason: 'Keap returned an HTML page, not a file' },
           bytes: null,
         };
       }
@@ -182,55 +216,125 @@ export async function downloadAsset(
 }
 
 /**
- * A plain GET with no cookies, no key, nothing. Node's fetch keeps no cookie
- * jar, and no headers are passed, so nothing about the Keap account can reach
- * a third-party host. The body is read in chunks and abandoned at the limit.
+ * Wraps a `dns.lookup` so a socket can only ever connect to a public address.
  *
- * Redirects are never followed here (`redirect: 'manual'`) — `downloadAsset`
- * re-classifies and re-routes every hop itself, so a public URL that 302s to
- * a private address is never fetched. Before the request, the hostname is
- * resolved and every returned address is checked: a public-looking hostname
- * that resolves to a private address is refused before any request is made.
+ * This runs inside the connection itself (it is `http.get`'s `lookup`), so the
+ * address that is checked is the address that is dialled — a hostname cannot
+ * resolve to something public for a pre-check and then to 127.0.0.1 for the
+ * request (DNS rebinding). Every returned address must be public; one private
+ * address refuses the lot. Node ≥ 20 asks with `all: true` (autoSelectFamily),
+ * older paths with a single address; both forms are answered.
+ */
+export function createGuardedLookup(lookup: DnsLookup = dnsLookup): ConnectLookup {
+  return (hostname, options, callback) => {
+    lookup(hostname, { ...options, all: true }, (error, addresses) => {
+      if (error) {
+        callback(error, []);
+        return;
+      }
+      const first = addresses[0];
+      if (first === undefined) {
+        callback(new Error(`refused: ${hostname} resolves to no address`), []);
+        return;
+      }
+      const blocked = addresses.find((entry) => isPrivateAddress(entry.address));
+      if (blocked) {
+        callback(
+          new Error(`refused: ${hostname} resolves to a private address ${blocked.address}`),
+          [],
+        );
+        return;
+      }
+      if (options.all) callback(null, addresses);
+      else callback(null, first.address, first.family);
+    });
+  };
+}
+
+const headerOf = (res: IncomingMessage, name: string): string | null => {
+  const value = res.headers[name];
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+};
+
+/**
+ * One GET over `node:http`/`node:https`, sending no headers beyond what the
+ * protocol requires, following no redirect, with its own socket (`agent:
+ * false`). It has NO address guard of its own — `lookup` is whatever it is
+ * given — so production code goes through `anonymousFetcher`, never this.
+ * Exported for tests, which drive it against a local server.
+ */
+export function anonymousGet(
+  url: string,
+  lookup: ConnectLookup,
+  timeoutMs: number,
+  maxBytes: number,
+): Promise<AssetResponse> {
+  const parsed = new URL(url);
+  const get =
+    parsed.protocol === 'https:' ? httpsGet : parsed.protocol === 'http:' ? httpGet : null;
+  if (get === null) return Promise.reject(new Error(`unsupported protocol ${parsed.protocol}`));
+
+  return new Promise((resolve, reject) => {
+    const request = get(
+      parsed,
+      { lookup, agent: false, headers: {}, signal: AbortSignal.timeout(timeoutMs) },
+      (res) => {
+        // A late abort or reset must not surface as an unhandled 'error'.
+        res.on('error', () => undefined);
+        const status = res.statusCode ?? 0;
+        const isRedirect = status >= 300 && status < 400;
+        // Nothing reads the body of a redirect or an error: release the socket.
+        if (status < 200 || status >= 300) res.resume();
+        const declared = Number.parseInt(headerOf(res, 'content-length') ?? '', 10);
+        resolve({
+          status,
+          contentType: headerOf(res, 'content-type'),
+          contentLength: Number.isFinite(declared) ? declared : null,
+          location: isRedirect ? headerOf(res, 'location') : null,
+          body: async () => {
+            const chunks: Buffer[] = [];
+            let total = 0;
+            for await (const chunk of res as AsyncIterable<Buffer>) {
+              total += chunk.length;
+              if (total > maxBytes) {
+                res.destroy();
+                throw new AssetTooLargeError(`exceeds ${maxBytes} bytes`);
+              }
+              chunks.push(chunk);
+            }
+            return Buffer.concat(chunks);
+          },
+        });
+      },
+    );
+    request.on('error', reject);
+  });
+}
+
+/**
+ * A plain GET with no cookies, no key, nothing: no headers are passed and no
+ * shared agent is used, so nothing about the Keap account can reach a
+ * third-party host. The body is read in chunks and abandoned at the limit.
+ *
+ * Redirects are never followed here — `downloadAsset` re-classifies and
+ * re-routes every hop itself, so a public URL that 302s to a private address
+ * is never fetched. The address check happens at connect time through
+ * `createGuardedLookup`, so it covers the address actually dialled. An IP
+ * literal never reaches a lookup, so a private one is refused here directly.
  */
 export function anonymousFetcher(
   maxBytes = MAX_ASSET_BYTES,
   timeoutMs = ASSET_TIMEOUT_MS,
-  doFetch: typeof fetch = fetch,
-  resolve: DnsResolve = dnsLookup,
+  lookup: DnsLookup = dnsLookup,
 ): AssetFetcher {
+  const guarded = createGuardedLookup(lookup);
   return async (url) => {
-    const hostname = new URL(url).hostname.replace(/^\[|\]$/g, '');
-    if (isIP(hostname) === 0) {
-      const addresses = await resolve(hostname, { all: true });
-      if (addresses.some((address) => isPrivateAddress(address.address))) {
-        throw new Error(`refused: ${hostname} resolves to a private address`);
-      }
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+    if (isIP(host) !== 0 && isPrivateAddress(host)) {
+      throw new Error(`refused: ${host} is a private address`);
     }
-    const response = await doFetch(url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const declared = Number.parseInt(response.headers.get('content-length') ?? '', 10);
-    const location =
-      response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
-    return {
-      status: response.status,
-      contentType: response.headers.get('content-type'),
-      contentLength: Number.isFinite(declared) ? declared : null,
-      location,
-      body: async () => {
-        if (response.body === null) return Buffer.alloc(0);
-        const chunks: Buffer[] = [];
-        let total = 0;
-        for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-          total += chunk.length;
-          if (total > maxBytes) throw new AssetTooLargeError(`exceeds ${maxBytes} bytes`);
-          chunks.push(Buffer.from(chunk));
-        }
-        return Buffer.concat(chunks);
-      },
-    };
+    return anonymousGet(url, guarded, timeoutMs, maxBytes);
   };
 }
 
@@ -239,15 +343,33 @@ export function anonymousFetcher(
  * read-only guard. Redirects are never followed here either — `maxRedirects:
  * 0` — so the session is never carried to wherever a redirect points;
  * `downloadAsset` re-routes each hop through the right fetcher.
+ *
+ * An expired session shows up as a redirect to the sign-in page, so that is
+ * checked on the redirect target. The asset's own URL is not checked: with
+ * redirects off it is only ever the URL we asked for, and a file such as
+ * `/images/login-button.png` is not a sign-in page.
  */
 export function sessionFetcher(context: BrowserContext): AssetFetcher {
   return async (url) => {
     const response = await safeGet(context, url, { timeout: ASSET_TIMEOUT_MS, maxRedirects: 0 });
-    assertResponseAuthenticated(response);
     const headers = response.headers();
     const declared = Number.parseInt(headers['content-length'] ?? '', 10);
     const status = response.status();
     const location = status >= 300 && status < 400 ? (headers['location'] ?? null) : null;
+    if (location !== null) {
+      let target: URL | null = null;
+      try {
+        target = new URL(location, url);
+      } catch {
+        // An unparseable Location is left to downloadAsset, which fails the asset.
+      }
+      if (target !== null && LOGIN_URL_PATTERN.test(target.host + target.pathname)) {
+        throw new SessionExpiredError(
+          `Session expired — ${url} redirected to ${target.href}. ` +
+            'Re-run:  npm run login -- --app <appName>',
+        );
+      }
+    }
     return {
       status,
       contentType: headers['content-type'] ?? null,
