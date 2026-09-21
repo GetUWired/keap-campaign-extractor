@@ -1506,5 +1506,9 @@ Not a subagent task — done in the main session with the user, against se232.
 - [ ] **Step 3:** `npm run fetch-content -- --app se232 --kinds email --limit 5`, then `--kinds form --limit 3`.
 - [ ] **Step 4:** `npm run export -- --app se232 --funnel 14848` (a campaign with a configured SMS) and one campaign with Apply Note steps (e.g. `--funnel 10253`). Spot-check `campaign.json`, one `emails/<id>/email.json` + `body.html`, one SMS and one note against what Keap shows.
 - [ ] **Step 5:** If se232 has no configured HTTP Request, say so; the populated-row parser stays unconfirmed and is noted in `docs/spike-findings.md` §18.
-- [ ] **Step 6:** Record the results as a short addendum to `docs/spike-findings.md` §18 and commit.
-- [ ] **Step 7:** Remind the user to revoke the API keys when finished.
+- [ ] **Step 6:** Capture one configured HTTP Request editor (any account) and confirm the populated-row markup; if it differs, the HTTP source is not trusted until the parser is updated.
+- [ ] **Step 7:** One read-only GET of the note editor with a made-up `marketingNoteId`, to confirm what a missing id returns.
+- [ ] **Step 8:** Check two or three webformIds that are not in the v2 list in the Keap UI: deleted, archived, or another form type?
+- [ ] **Step 9:** Note what an expired session returns from the /app/ endpoints (redirect, 401/403, or a 200 sign-in page).
+- [ ] **Step 10:** Record the results as a short addendum to `docs/spike-findings.md` §18 and commit.
+- [ ] **Step 11:** Remind the user to revoke the API keys when finished.

@@ -373,7 +373,8 @@ record says `fieldsAvailable: false`), SMS messages, Apply Note templates, and H
 Emails and web forms need `KEAP_API_KEY`; the rest use your login session.
 
 **Not read yet**, and listed as NOT FETCHED in every run and as `notFetched` in the export: landing
-pages, email attachments, legacy HTTP Post steps, smart and internal forms.
+pages, email attachments, email reply-to and preview text, legacy HTTP Post steps, smart and
+internal forms, and SMS steps keyed only by `automationMessageId`.
 
 ```bash
 npm run fetch-content -- --app se232
@@ -383,10 +384,10 @@ npm run fetch-content -- --app se232
 npm run export -- --app se232
 ```
 
-`fetch-content` reads the content every campaign step points at — emails, landing pages, forms,
-SMS, note templates, HTTP steps — and every image, stylesheet, font and attachment that content uses.
-It is resumable like `extract-all`, fetches shared content once, and needs a login session (plus
-`KEAP_API_KEY` if any content kind is read through the REST API — it says which before starting).
+`fetch-content` reads the content every campaign step points at — emails, forms, SMS, note
+templates, HTTP steps — and every image, stylesheet and font that content uses. It is resumable
+like `extract-all`, fetches shared content once, and needs a login session (plus `KEAP_API_KEY` if
+any content kind is read through the REST API — it says which before starting).
 
 `export` needs no network. It writes `export/se232/`, one self-contained folder per campaign:
 
@@ -396,9 +397,8 @@ export/se232/
   merge-fields.json      every ~Contact.X~ style merge field, to map onto the new platform
   campaigns/<id>-<name>/
     campaign.json        goals, sequences, steps, decisions, tasks and canvas notes
-    emails/<id>/         email.json (to, cc, bcc, subject…), body.html, body.txt, attachments/
-    landing-pages/<id>/  page.json, page.html
-    forms/<id>/          form.json, form.html
+    emails/<id>/         email.json (to, cc, bcc, subject…), body.html, body.txt
+    forms/<id>/          form.json — no HTML or field list; the API exposes neither
     sms/ notes/ http/    one JSON file each
     assets/              every image and file the campaign's content uses, plus assets.json
 ```
