@@ -47,6 +47,34 @@ function decode(text: string): string {
 }
 
 /**
+ * `a=1&b=2`, as in a query string or a form-encoded body. Rewritten pair by
+ * pair as text, so everything that is not a secret stays exactly as written.
+ */
+function redactEncodedPairs(
+  text: string,
+  location: 'query' | 'body',
+  redacted: Redaction[],
+): string {
+  return text
+    .split('&')
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      if (eq < 0) return pair;
+      const name = decode(pair.slice(0, eq));
+      if (!isSecret(name, decode(pair.slice(eq + 1)), location)) return pair;
+      redacted.push({ location, name });
+      return `${pair.slice(0, eq)}=${REDACTED}`;
+    })
+    .join('&');
+}
+
+/** `name=value(&name=value)*`, values possibly empty, a trailing `&` allowed. */
+const FORM_BODY = /^[^=&\s]+=[^&\s]*(?:&[^=&\s]+=[^&\s]*)*&?$/;
+
+/** Recorded when a body could not be parsed, so a person checks it by hand. */
+export const UNPARSED_BODY = '(unparsed — review manually)';
+
+/**
  * Rewritten as text rather than through URL/URLSearchParams, which would
  * percent-encode merge fields and the placeholder and hand back a URL nobody
  * recognises.
@@ -65,15 +93,7 @@ function redactUrl(url: string, redacted: Redaction[]): string {
   const query = out.slice(queryAt + 1, hashAt < 0 ? undefined : hashAt);
   const tail = hashAt < 0 ? '' : out.slice(hashAt);
 
-  const parts = query.split('&').map((pair) => {
-    const eq = pair.indexOf('=');
-    if (eq < 0) return pair;
-    const name = decode(pair.slice(0, eq));
-    if (!isSecret(name, decode(pair.slice(eq + 1)), 'query')) return pair;
-    redacted.push({ location: 'query', name });
-    return `${pair.slice(0, eq)}=${REDACTED}`;
-  });
-  return `${out.slice(0, queryAt)}?${parts.join('&')}${tail}`;
+  return `${out.slice(0, queryAt)}?${redactEncodedPairs(query, 'query', redacted)}${tail}`;
 }
 
 function redactJson(value: unknown, redacted: Redaction[]): unknown {
@@ -98,6 +118,9 @@ function redactBody(body: string | null, redacted: Redaction[]): string | null {
   try {
     parsed = JSON.parse(body);
   } catch {
+    const trimmed = body.trim();
+    if (FORM_BODY.test(trimmed)) return redactEncodedPairs(body, 'body', redacted);
+    if (trimmed !== '') redacted.push({ location: 'body', name: UNPARSED_BODY });
     return body;
   }
   const before = redacted.length;
