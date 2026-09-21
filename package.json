@@ -14,6 +14,7 @@
     "normalize": "tsx src/cli/normalize.ts",
     "enrich": "tsx src/cli/enrich.ts",
     "fetch-content": "tsx src/cli/fetchContent.ts",
+    "export": "tsx src/cli/export.ts",
     "render": "tsx src/cli/render.ts",
     "tag-impact": "tsx src/cli/tagImpact.ts",
     "test": "vitest run",

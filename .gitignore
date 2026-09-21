@@ -16,4 +16,4 @@ automations-list.csv
 tag-impact.*
 
 # Content exports — email bodies, landing pages, forms: client content
-export/
+/export/

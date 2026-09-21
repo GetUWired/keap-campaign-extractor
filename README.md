@@ -20,6 +20,7 @@ during ordinary read-only runs. See [The read-only guard](#the-read-only-guard).
 - [Step 5 — Resolve names (optional)](#step-5--resolve-names-optional)
 - [Step 6 — Readable pages (optional)](#step-6--readable-pages-optional)
 - [Step 7 — Tag impact analysis](#step-7--tag-impact-analysis)
+- [Step 8 — Export campaign content (migration)](#step-8--export-campaign-content-migration)
 - [Where everything lands](#where-everything-lands)
 - [Handing the report to someone](#handing-the-report-to-someone)
 - [Safety](#safety)
@@ -361,6 +362,53 @@ exactly that, and the word "safe" appears nowhere in it by design. This tool nar
 check by hand; it does not replace the checking, and it does not recommend deletions.
 
 It also does not perform deletions or merges. It has no write access to Keap at all.
+
+---
+
+## Step 8 — Export campaign content (migration)
+
+```bash
+npm run fetch-content -- --app se232
+```
+
+```bash
+npm run export -- --app se232
+```
+
+`fetch-content` reads the content every campaign step points at — emails, landing pages, forms,
+SMS, note templates, HTTP steps — and every image, stylesheet, font and attachment that content uses.
+It is resumable like `extract-all`, fetches shared content once, and needs a login session (plus
+`KEAP_API_KEY` if any content kind is read through the REST API — it says which before starting).
+
+`export` needs no network. It writes `export/se232/`, one self-contained folder per campaign:
+
+```
+export/se232/
+  manifest.json          counts, and any content that could not be fetched
+  merge-fields.json      every ~Contact.X~ style merge field, to map onto the new platform
+  campaigns/<id>-<name>/
+    campaign.json        goals, sequences, steps, decisions, tasks and canvas notes
+    emails/<id>/         email.json (to, cc, bcc, subject…), body.html, body.txt, attachments/
+    landing-pages/<id>/  page.json, page.html
+    forms/<id>/          form.json, form.html
+    sms/ notes/ http/    one JSON file each
+    assets/              every image and file the campaign's content uses, plus assets.json
+```
+
+Content used by several campaigns is copied into each and lists the others under `sharedWith`.
+HTML is never modified; `assets.json` maps each original URL to its local file.
+
+**HTTP step credentials are redacted** and listed under `redacted` in each file.
+`--include-secrets` keeps them and marks the manifest; treat such an export as a secret.
+
+| Flag | Command | Meaning |
+|---|---|---|
+| `--kinds email,sms` | fetch-content | Fetch only these kinds. |
+| `--funnel <id>` | both | One campaign. `export` writes it to `export/<app>/_funnel-<id>/`. |
+| `--force`, `--limit`, `--delay`, `--headed` | fetch-content | As for `extract-all`. |
+| `--include-secrets` | export | Keep HTTP credentials. |
+
+`export/` is gitignored. It holds client content — do not commit it.
 
 ---
 
