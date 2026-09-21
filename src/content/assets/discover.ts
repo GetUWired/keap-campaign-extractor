@@ -1,4 +1,5 @@
 import { load } from 'cheerio';
+import { isIP } from 'node:net';
 
 export type SkipReason =
   | 'mergeField'
@@ -46,68 +47,9 @@ export function isKeapHosted(url: string): boolean {
   return KEAP_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
 }
 
-/**
- * URLs come from content someone else authored, and are fetched from the
- * operator's machine. A link to a private address is refused rather than
- * requested.
- */
-export function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1' || host === '0.0.0.0') {
-    return true;
-  }
-
-  // IPv6 detection: contains ':'
-  if (host.includes(':')) {
-    // Loopback :: and ::1 already handled above, but be thorough
-    if (host === '::') return true;
-
-    // Link-local: fe80::/10 (first group fe80-febf)
-    if (/^fe[89a-b][0-9a-f]:/i.test(host)) return true;
-
-    // Unique-local: fc00::/7 and fd00::/8 (first group fc or fd)
-    if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-
-    // IPv4-mapped IPv6: ::ffff:x.x.x.x or ::ffff:hexhex:hexhex
-    const ipv4MappedMatch = /^::ffff:(?:(\d+)\.(\d+)\.(\d+)\.(\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(host);
-    if (ipv4MappedMatch) {
-      if (ipv4MappedMatch[1]) {
-        // Dotted decimal form
-        const a = Number(ipv4MappedMatch[1]);
-        const b = Number(ipv4MappedMatch[2]);
-        const c = Number(ipv4MappedMatch[3]);
-        const d = Number(ipv4MappedMatch[4]);
-        // Decode the IPv4 address and check if it's private
-        return (
-          a === 0 ||
-          a === 10 ||
-          a === 127 ||
-          (a === 169 && b === 254) ||
-          (a === 172 && b >= 16 && b <= 31) ||
-          (a === 192 && b === 168)
-        );
-      } else {
-        // Hex form (e.g., ::ffff:7f00:1 for 127.0.0.1)
-        const hex1 = parseInt(ipv4MappedMatch[5] ?? '', 16);
-        const hex2 = parseInt(ipv4MappedMatch[6] ?? '', 16);
-        const a = (hex1 >> 8) & 0xff;
-        const b = hex1 & 0xff;
-        // Check if decoded IPv4 is private
-        return (
-          a === 0 ||
-          a === 10 ||
-          a === 127 ||
-          (a === 169 && b === 254) ||
-          (a === 172 && b >= 16 && b <= 31) ||
-          (a === 192 && b === 168)
-        );
-      }
-    }
-
-    return false;
-  }
-
-  const octets = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+function isPrivateIPv4(ip: string): boolean {
+  if (ip === '255.255.255.255') return true;
+  const octets = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
   if (!octets) return false;
   const a = Number(octets[1]);
   const b = Number(octets[2]);
@@ -117,8 +59,101 @@ export function isPrivateHost(hostname: string): boolean {
     a === 127 ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)
   );
+}
+
+/**
+ * Expands an IPv6 literal (already validated by `net.isIP`) into eight
+ * numeric 16-bit groups, handling `::` compression and an embedded dotted
+ * IPv4 tail (e.g. `::ffff:127.0.0.1`).
+ */
+function expandIPv6(ip: string): number[] | null {
+  let address = ip;
+
+  const lastColon = address.lastIndexOf(':');
+  const tail = address.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    const octets = tail.split('.').map(Number);
+    if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+      return null;
+    }
+    const [a, b, c, d] = octets as [number, number, number, number];
+    const hex1 = ((a << 8) | b).toString(16);
+    const hex2 = ((c << 8) | d).toString(16);
+    address = `${address.slice(0, lastColon + 1)}${hex1}:${hex2}`;
+  }
+
+  const sections = address.split('::');
+  if (sections.length > 2) return null;
+
+  let groupStrings: string[];
+  if (sections.length === 2) {
+    const head = sections[0] === '' ? [] : (sections[0] ?? '').split(':');
+    const tailGroups = sections[1] === '' ? [] : (sections[1] ?? '').split(':');
+    const missing = 8 - head.length - tailGroups.length;
+    if (missing < 0) return null;
+    groupStrings = [...head, ...Array<string>(missing).fill('0'), ...tailGroups];
+  } else {
+    groupStrings = address.split(':');
+  }
+  if (groupStrings.length !== 8) return null;
+
+  const groups = groupStrings.map((g) => (/^[0-9a-f]{1,4}$/i.test(g) ? parseInt(g, 16) : NaN));
+  if (groups.some((g) => Number.isNaN(g))) return null;
+  return groups;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const groups = expandIPv6(ip);
+  if (!groups) return false;
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = groups;
+
+  if (groups.every((g) => g === 0)) return true; // ::
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && g6 === 0 && g7 === 1) {
+    return true; // ::1
+  }
+  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((g0 & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
+    // IPv4-mapped ::ffff:0:0/96
+    const a = (g6 >> 8) & 0xff;
+    const b = g6 & 0xff;
+    const c = (g7 >> 8) & 0xff;
+    const d = g7 & 0xff;
+    return isPrivateIPv4(`${a}.${b}.${c}.${d}`);
+  }
+
+  return false;
+}
+
+/**
+ * True when `ip` is a bare IP literal (no brackets) that routes to a private,
+ * loopback, link-local or otherwise non-public destination. Anything that is
+ * not an IP literal returns false — hostnames are handled by `isPrivateHost`
+ * (the `.localhost` / `localhost` cases) and DNS resolution.
+ */
+export function isPrivateAddress(ip: string): boolean {
+  const version = isIP(ip);
+  if (version === 4) return isPrivateIPv4(ip);
+  if (version === 6) return isPrivateIPv6(ip.toLowerCase());
+  return false;
+}
+
+/**
+ * URLs come from content someone else authored, and are fetched from the
+ * operator's machine. A link to a private address is refused rather than
+ * requested.
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0') {
+    return true;
+  }
+  return isPrivateAddress(host);
 }
 
 export function classifyUrl(raw: string, base: string | null): { url: string } | SkippedUrl {

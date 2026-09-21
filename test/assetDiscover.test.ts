@@ -5,6 +5,7 @@ import {
   discoverCssUrls,
   discoverHtmlAssets,
   isKeapHosted,
+  isPrivateAddress,
   isPrivateHost,
   parseSrcset,
 } from '../src/content/assets/discover.js';
@@ -71,6 +72,30 @@ describe('isKeapHosted / isPrivateHost', () => {
     expect(isPrivateHost('[2606:4700::1111]')).toBe(false);
     expect(isPrivateHost('[::ffff:808:808]')).toBe(false);
   });
+});
+
+describe('isPrivateAddress', () => {
+  it.each([
+    '127.0.0.1',
+    '10.1.2.3',
+    '100.64.0.1',
+    '::',
+    '::1',
+    '0:0:0:0:0:0:0:1',
+    'fe80::1',
+    'febf::1',
+    'fec0::1',
+    'fc00::1',
+    'fd12:3456::1',
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '0:0:0:0:0:ffff:c0a8:101',
+  ])('treats %s as private', (ip) => expect(isPrivateAddress(ip)).toBe(true));
+
+  it.each(['8.8.8.8', '2606:4700::1111', '::ffff:808:808', 'fd::1', 'example.com'])(
+    'treats %s as public or not an IP literal',
+    (ip) => expect(isPrivateAddress(ip)).toBe(false),
+  );
 });
 
 describe('parseSrcset / cssUrls', () => {

@@ -84,10 +84,10 @@ describe('classifyRequest — blocked writes', () => {
 describe('safeGet timeout forwarding', () => {
   it('forwards timeout to context.request.get', async () => {
     const { safeGet } = await import('../src/guard/readonly.js');
-    let capturedOptions: { timeout?: number } | undefined;
+    let capturedOptions: { timeout?: number; maxRedirects?: number } | undefined;
     const fakeBrowserContext = {
       request: {
-        get: async (_url: string, options?: { timeout?: number }) => {
+        get: async (_url: string, options?: { timeout?: number; maxRedirects?: number }) => {
           capturedOptions = options;
           return { status: () => 200, headers: () => ({}), body: async () => Buffer.alloc(0) };
         },
@@ -95,6 +95,24 @@ describe('safeGet timeout forwarding', () => {
     } as unknown as BrowserContext;
     await safeGet(fakeBrowserContext, 'https://se232.infusionsoft.com/a.png', { timeout: 30000 });
     expect(capturedOptions).toEqual({ timeout: 30000 });
+  });
+
+  it('forwards both timeout and maxRedirects to context.request.get', async () => {
+    const { safeGet } = await import('../src/guard/readonly.js');
+    let capturedOptions: { timeout?: number; maxRedirects?: number } | undefined;
+    const fakeBrowserContext = {
+      request: {
+        get: async (_url: string, options?: { timeout?: number; maxRedirects?: number }) => {
+          capturedOptions = options;
+          return { status: () => 200, headers: () => ({}), body: async () => Buffer.alloc(0) };
+        },
+      },
+    } as unknown as BrowserContext;
+    await safeGet(fakeBrowserContext, 'https://se232.infusionsoft.com/a.png', {
+      timeout: 30000,
+      maxRedirects: 0,
+    });
+    expect(capturedOptions).toEqual({ timeout: 30000, maxRedirects: 0 });
   });
 
   it('refuses blocked URLs without calling context.request.get', async () => {

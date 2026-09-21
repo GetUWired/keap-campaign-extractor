@@ -135,11 +135,14 @@ export function installReadOnlyGuard(context: BrowserContext): Guard {
 export async function safeGet(
   context: BrowserContext,
   url: string,
-  options: { timeout?: number } = {},
+  options: { timeout?: number; maxRedirects?: number } = {},
 ): Promise<APIResponse> {
   const reason = classifyRequest('GET', url);
   if (reason) {
     throw new Error(`safeGet refused ${url} (${reason})`);
   }
-  return context.request.get(url, options.timeout === undefined ? undefined : { timeout: options.timeout });
+  const forwarded: { timeout?: number; maxRedirects?: number } = {};
+  if (options.timeout !== undefined) forwarded.timeout = options.timeout;
+  if (options.maxRedirects !== undefined) forwarded.maxRedirects = options.maxRedirects;
+  return context.request.get(url, Object.keys(forwarded).length === 0 ? undefined : forwarded);
 }

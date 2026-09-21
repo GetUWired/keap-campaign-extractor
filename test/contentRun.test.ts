@@ -75,10 +75,22 @@ const serve =
   async (url) => {
     const entry = bodies[url];
     if (entry === undefined || typeof entry === 'number') {
-      return { status: typeof entry === 'number' ? entry : 404, contentType: null, contentLength: 0, body: async () => Buffer.alloc(0) };
+      return {
+        status: typeof entry === 'number' ? entry : 404,
+        contentType: null,
+        contentLength: 0,
+        location: null,
+        body: async () => Buffer.alloc(0),
+      };
     }
     const data = Buffer.from(entry.body);
-    return { status: 200, contentType: entry.type, contentLength: data.length, body: async () => data };
+    return {
+      status: 200,
+      contentType: entry.type,
+      contentLength: data.length,
+      location: null,
+      body: async () => data,
+    };
   };
 
 function deps(src: ContentSource, ledger = memoryLedger()) {
