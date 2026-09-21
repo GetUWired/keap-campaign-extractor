@@ -1161,3 +1161,60 @@ and `Merge` booleans; this tool's format wants a `group` column naming the merge
 `duplicatedGroups` cannot be computed, and the merge column of the table above is really "tags
 marked for merging", not "tags merging into each other". Producing the grouped list is the
 operator's step, and the tool reads it as soon as it exists.
+
+## 18. Content sources for the migration export
+
+Run 2026-09-21 on `jordan` (personal) and `se232` (live), for
+`docs/superpowers/specs/2026-09-21-content-export-design.md` phase 0. Every request below was a GET
+through the project's guards — REST through `src/api/guard.ts`, app URLs through `safeGet`. No write
+was attempted or allowed.
+
+### The campaign builder cannot be driven read-only
+
+Two findings closed the "open each editor and capture its traffic" approach:
+
+- **Playwright's bundled Chromium cannot render the builder** — `ReferenceError: Polymer is not
+  defined`. The installed Google Chrome (`channel: 'chrome'`) can.
+- **Opening an editor writes.** With the builder rendered in Chrome, opening one email produced
+  `PUT /app/funnel/<id>`, `POST /app/funnel/editor`, `POST /app/editorLockout/unlock`, and the email
+  editor itself loads by `POST /app/emailFunnel/hotSwapEditor` / `hotSwapDetails` /
+  `/app/authoring/hotSwapSideBar`. All blocked by the guard, so nothing changed — but reading
+  content through the editors is not read-only, and the guard is not being loosened for it.
+- **Campaign list search and paging are POSTs** (`/Reports/searchTemplate.jsp?view=gridGuts`) and
+  fail under the guard, which is why they showed "error loading content".
+
+The endpoints below were found instead in the builder's own scripts (`funnel_js.jsp`,
+`/resources/vue/js/app.js`), then confirmed with one GET each.
+
+### What each kind can be read from
+
+| Kind | Source | Result |
+|---|---|---|
+| Email (legacy, `bardEmail`, `unlayerEmail`) | REST `GET /crm/rest/v2/emails/templates/{marketingEmailId}` | `from_address`, `to_address`, `cc_address`, `bcc_address`, `subject`, `html_body`, `text_body` (null when HTML-only), `content_type`, `piece_title`. Confirmed on 1261, 1945, 2415. **No attachments, reply-to or preview text.** v1 of the same path 404s. |
+| Web form | REST `GET /crm/rest/v2/webforms` (list only; `/webforms/{id}` 404s on v1 and v2) | `webform_url` (public hosted form page), `exit_option` MESSAGE/REDIRECT, `thank_you_page_url`, `webform_type`. The form's HTML and fields come from a plain GET of `webform_url`. |
+| SMS | `GET /app/automatedSmsFunnel/{marketingAutomatedSmsId}` | JSON `{ id (= automationMessageId), message, phoneTypes, sourceType, externalReferenceId (funnelId), … }`. 289-character message confirmed on 50970; `message: null` on an unconfigured step. The same URL is saved by PUT. |
+| Apply Note template | `GET /app/noteFunnel/edit?marketingNoteId={id}&mayPickUser=false` | HTML form: `actionType`, `actionDescription` (subject), `creationNotes` (body), `notifyUsers`, `assignmentUserId`. |
+| HTTP Request (new) | `GET /app/httpRequestFunnel/requests/{httpRequestConfigId}` | HTML form: `httpRequestType`, `targetUrl`, `http-request-body`. The only one on se232 is unconfigured. |
+| HTTP Post (legacy) | none | Keyed by `fileBoxId` (not an HTTP-specific attribute); `GET /app/httpFunnel/{fileBoxId}` → 405. The builder clones it by POST before opening. |
+| Landing page | none yet | No REST endpoint (v1/v2 `landingPages` 404). Legacy editor loads by POST; Unlayer and Convrrt pages are picked from separate products (`/app/unlayerLandingPageFunnel/unlayerLandingPageEditor` is a picker lightbox). Published pages are public — finding their URLs is the open question. |
+| Email attachment | none | Not in the template response; `…/emails/templates/{id}/attachments` 404s. |
+
+### Ids that are not integers
+
+Unlayer and Convrrt landing pages are keyed by UUIDs (`unlayerLandingPageId`,
+`convrrtLandingPageId`), and `convrrtLandingPageId` is not in `FK_ATTRIBUTES`. The content
+collector accepts `^[A-Za-z0-9][A-Za-z0-9-]{0,63}$` and reads unlifted attributes from `config`.
+
+### Counts in se232 (398 campaigns)
+
+`unlayerEmail` 2308, `bardEmail` 219, `note` (Apply Note) 592, `unlayerLandingPage` 23,
+`convrrtLandingPage` 7, `automatedSms` 5, `httpRequest` 1, legacy `http` 18, web form goals 26,
+`smartForm` 1, `internalForm` 2.
+
+### Still open
+
+- Landing page content, all three builders.
+- Legacy HTTP Post configuration.
+- Email attachments.
+- Whether the editor GETs above take an editor lock server-side — none was observed, but a lock is
+  not visible from the response.
