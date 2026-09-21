@@ -3,6 +3,9 @@ import type { BrowserContext } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { smsSource } from '../src/content/sources/sms.js';
 import type { ContentItemKey, FetchContext } from '../src/content/types.js';
+import { isSessionExpired } from '../src/errors.js';
+
+const SIGN_IN_PAGE = '<form><input id="username"><input type="password"></form><h1>Sign in</h1>';
 
 const fixture = (name: string) => readFileSync(`test/fixtures/content/${name}`, 'utf8');
 
@@ -63,6 +66,12 @@ describe('smsSource', () => {
   it('refuses an HTML page served in place of the message', async () => {
     const { ctx } = ctxServing('<html><body>Sign in</body></html>', 'text/html');
     await expect(smsSource.fetch(key('1'), ctx)).rejects.toThrow(/expected JSON/);
+  });
+
+  it('treats a sign-in page served in place of the message as an expired session', async () => {
+    const { ctx } = ctxServing(SIGN_IN_PAGE, 'text/html');
+    const error = await smsSource.fetch(key('1'), ctx).catch((e: unknown) => e);
+    expect(isSessionExpired(error)).toBe(true);
   });
 
   it('rejects JSON that is not an SMS message', () => {

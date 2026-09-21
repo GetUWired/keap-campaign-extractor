@@ -81,9 +81,13 @@ describe('createWebformSource', () => {
     await expect(source.fetch(key('3'), ctx)).resolves.toMatchObject({ record: { name: 'E-mail Opt-Out Form' } });
   });
 
-  it('reports a form missing from the list as not found', async () => {
-    await expect(createWebformSource().fetch(key('999'), ctxWith(async () => list))).rejects.toBeInstanceOf(
-      ContentNotFoundError,
+  it('reports a form missing from the list as a plain failure, not confirmed deleted', async () => {
+    const source = createWebformSource();
+    const error: unknown = await source.fetch(key('999'), ctxWith(async () => list)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ContentNotFoundError);
+    expect((error as Error).message).toBe(
+      'web form 999 is not listed by /crm/rest/v2/webforms — it may be deleted, archived, or a form type the API does not list',
     );
   });
 });

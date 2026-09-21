@@ -30,6 +30,17 @@ export interface AppResponse {
   body: string;
 }
 
+/**
+ * True when the body looks like Keap's sign-in form rather than content — the
+ * marker `appGet` cannot see through a redirect (Keap sometimes answers an
+ * expired session with a 200 sign-in page instead of a redirect or a 401/403).
+ */
+export function looksLikeSignInPage(body: string): boolean {
+  const hasFormMarker = /type="password"|id="username"/i.test(body);
+  const hasLoginWord = /login|sign\s*in|signin/i.test(body);
+  return hasFormMarker && hasLoginWord;
+}
+
 export function assertContentPath(path: string): void {
   const pathname = path.split('?')[0] ?? '';
   if (!APP_CONTENT_PATHS.some((pattern) => pattern.test(pathname))) {
@@ -69,6 +80,11 @@ export async function appGet(ctx: FetchContext, path: string): Promise<AppRespon
       );
     }
     throw new Error(`${path} redirected unexpectedly (${status})`);
+  }
+  if (status === 401 || status === 403) {
+    throw new SessionExpiredError(
+      `Session expired — ${path} returned ${status}. Re-run:  npm run login -- --app ${ctx.app}`,
+    );
   }
   if (status === 404) throw new ContentNotFoundError(`${path} → 404`);
   if (status < 200 || status >= 300) throw new Error(`${path} → HTTP ${status}`);

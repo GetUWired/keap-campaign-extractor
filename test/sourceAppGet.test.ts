@@ -81,6 +81,18 @@ describe('appGet', () => {
     await expect(appGet(ctx, '/app/automatedSmsFunnel/1')).rejects.toBeInstanceOf(ContentNotFoundError);
   });
 
+  it('treats a 401 as an expired session', async () => {
+    const { ctx } = fakeContext({ status: 401 });
+    const error = await appGet(ctx, '/app/automatedSmsFunnel/1').catch((e: unknown) => e);
+    expect(isSessionExpired(error)).toBe(true);
+  });
+
+  it('treats a 403 as an expired session', async () => {
+    const { ctx } = fakeContext({ status: 403 });
+    const error = await appGet(ctx, '/app/automatedSmsFunnel/1').catch((e: unknown) => e);
+    expect(isSessionExpired(error)).toBe(true);
+  });
+
   it('fails on other statuses', async () => {
     const { ctx } = fakeContext({ status: 500 });
     await expect(appGet(ctx, '/app/automatedSmsFunnel/1')).rejects.toThrow(/HTTP 500/);

@@ -1,11 +1,5 @@
 import { cleanName } from '../../parse/cells.js';
-import {
-  ContentNotFoundError,
-  type ContentSource,
-  type FetchContext,
-  type FetchedContent,
-  type FormContent,
-} from '../types.js';
+import type { ContentSource, FetchContext, FetchedContent, FormContent } from '../types.js';
 
 export const WEBFORMS_PATH = '/crm/rest/v2/webforms';
 
@@ -30,6 +24,9 @@ export function mapWebform(entry: WebformEntry): FetchedContent {
     fieldsAvailable: false,
     thankYou: {
       type: exit === 'REDIRECT' ? 'redirect' : exit === 'MESSAGE' ? 'message' : 'unknown',
+      // MESSAGE: the API carries no message text for this exit type, so `value` is
+      // the thank-you URL field, which is normally null for a MESSAGE exit — not
+      // the message shown to the contact.
       value: text(entry.thank_you_page_url),
     },
     publicUrl: text(entry.webform_url),
@@ -80,7 +77,16 @@ export function createWebformSource(): ContentSource {
 
     async fetch(key, ctx) {
       const entry = (await load(ctx)).get(key.id);
-      if (entry === undefined) throw new ContentNotFoundError(`web form ${key.id} is not in the account`);
+      if (entry === undefined) {
+        // Not ContentNotFoundError: the v2 list matched only 63 of 113 referenced
+        // webformIds in the enrichment spike (docs/spike-findings.md ~line 655), so
+        // an id absent from it is not proven deleted — it may be a form type the
+        // list does not cover. A plain Error records `failed` and is retried on
+        // the next run, rather than being asserted as a finding.
+        throw new Error(
+          `web form ${key.id} is not listed by ${WEBFORMS_PATH} — it may be deleted, archived, or a form type the API does not list`,
+        );
+      }
       return mapWebform(entry);
     },
 

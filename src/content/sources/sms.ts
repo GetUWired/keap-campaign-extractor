@@ -1,5 +1,6 @@
+import { SessionExpiredError } from '../../errors.js';
 import type { ContentSource, FetchedContent, SmsContent } from '../types.js';
-import { appGet } from './appGet.js';
+import { appGet, looksLikeSignInPage } from './appGet.js';
 
 interface SmsResponse {
   id?: unknown;
@@ -30,6 +31,9 @@ export function mapSms(raw: unknown, body: string): FetchedContent {
   return { record, files: [], evidence: [{ name: 'response.json', body }], assetUrls: [] };
 }
 
+// The response's `id` is the automationMessageId, not the requested
+// marketingAutomatedSmsId, so it cannot be checked against the request to tell a
+// response for the wrong step apart from a genuine one. Trust rests on the URL.
 export const smsSource: ContentSource = {
   kind: 'sms',
   attributes: ['marketingAutomatedSmsId'],
@@ -39,6 +43,11 @@ export const smsSource: ContentSource = {
   async fetch(key, ctx) {
     const response = await appGet(ctx, smsPath(key.id));
     if (!response.contentType.toLowerCase().includes('json')) {
+      if (looksLikeSignInPage(response.body)) {
+        throw new SessionExpiredError(
+          `Session expired — ${smsPath(key.id)} returned a sign-in page. Re-run:  npm run login -- --app ${ctx.app}`,
+        );
+      }
       throw new Error(`expected JSON from ${smsPath(key.id)}, got ${response.contentType || 'no content type'}`);
     }
     return mapSms(JSON.parse(response.body) as unknown, response.body);
