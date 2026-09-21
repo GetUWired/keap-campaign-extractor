@@ -2,7 +2,23 @@ import { readFileSync } from 'node:fs';
 import type { BrowserContext } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { noteSource, parseNoteEditor } from '../src/content/sources/note.js';
-import type { ContentItemKey, FetchContext } from '../src/content/types.js';
+import { ContentNotFoundError, type ContentItemKey, type FetchContext } from '../src/content/types.js';
+import { isSessionExpired } from '../src/errors.js';
+
+const SIGN_IN_PAGE = '<form><input id="username"><input type="password"></form><h1>Sign in</h1>';
+
+const blankEditor = editorFixture();
+
+function editorFixture(): string {
+  const base = readFileSync('test/fixtures/content/note-editor.html', 'utf8');
+  return base
+    .replace('<option selected="selected">UPDATE</option>', '<option>UPDATE</option>')
+    .replace('value="Purchased - Example Trip Kickoff"', 'value=""')
+    .replace(
+      '<textarea class="textAreaWidth" id="creationNotes">Call ~Contact.FirstName~ about the deposit &amp; flights.</textarea>',
+      '<textarea class="textAreaWidth" id="creationNotes"></textarea>',
+    );
+}
 
 const editor = readFileSync('test/fixtures/content/note-editor.html', 'utf8');
 
@@ -79,5 +95,26 @@ describe('noteSource', () => {
   it('refuses an empty shell', async () => {
     const { ctx } = ctxServing('<div id="wrapper_note"></div>');
     await expect(noteSource.fetch(key('1'), ctx)).rejects.toThrow(/not the note editor/);
+  });
+
+  it('treats a sign-in page served in place of the editor as an expired session', async () => {
+    const { ctx } = ctxServing(SIGN_IN_PAGE);
+    const error = await noteSource.fetch(key('1'), ctx).catch((e: unknown) => e);
+    expect(isSessionExpired(error)).toBe(true);
+  });
+
+  it('reports a blank editor — no type, no title, no body — as not found', async () => {
+    expect(parseNoteEditor(blankEditor)).toMatchObject({ kind: 'note', type: null, subject: null, body: '' });
+    const { ctx } = ctxServing(blankEditor);
+    const error = await noteSource.fetch(key('1'), ctx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ContentNotFoundError);
+    expect((error as Error).message).toBe('note template 1 is blank — deleted, or never filled in');
+  });
+
+  it('still parses the normal fixture as genuine, not blank', async () => {
+    const { ctx } = ctxServing(editor);
+    await expect(noteSource.fetch(key('35421'), ctx)).resolves.toMatchObject({
+      record: { kind: 'note', type: 'UPDATE' },
+    });
   });
 });
