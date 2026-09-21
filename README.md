@@ -367,10 +367,13 @@ It also does not perform deletions or merges. It has no write access to Keap at 
 
 ## Step 8 — Export campaign content (migration)
 
-> **Status:** the content sources — the code that reads each kind of content from Keap — land in a
-> follow-up plan. Until then `fetch-content` lists every kind it cannot read yet and makes no
-> requests for it, and `export` still writes each campaign's structure, showing that content as
-> `notFetched`.
+**What is read today.** Emails (from, to, cc, bcc, subject, HTML and text — through the REST API),
+web forms (name, hosted URL, redirect or thank-you setting — the API has no field list, and the
+record says `fieldsAvailable: false`), SMS messages, Apply Note templates, and HTTP Request steps.
+Emails and web forms need `KEAP_API_KEY`; the rest use your login session.
+
+**Not read yet**, and listed as NOT FETCHED in every run and as `notFetched` in the export: landing
+pages, email attachments, legacy HTTP Post steps, smart and internal forms.
 
 ```bash
 npm run fetch-content -- --app se232
