@@ -121,6 +121,15 @@ export interface FormContent {
   name: string | null;
   fields: FormField[];
   thankYou: { type: 'message' | 'redirect' | 'landingPage' | 'unknown'; value: string | null };
+  /** The form's hosted page. */
+  publicUrl?: string | null;
+  /** Keap's form builder, e.g. LEGACY. */
+  formType?: string | null;
+  /**
+   * False when Keap exposed no field list for this form. `fields: []` then means
+   * "unknown", not "a form without fields" — the export must not read it as the latter.
+   */
+  fieldsAvailable?: boolean;
 }
 
 export interface SmsContent {
@@ -128,6 +137,8 @@ export interface SmsContent {
   name: string | null;
   text: string;
   sender: string | null;
+  /** Which of the contact's phone numbers Keap sends to. */
+  phoneTypes?: string[];
 }
 
 export interface NoteContent {
@@ -136,6 +147,10 @@ export interface NoteContent {
   type: string | null;
   subject: string | null;
   body: string;
+  /** Users notified when the note is applied. */
+  notifyUsers?: { id: string; name: string }[];
+  /** Who the note is assigned to; Keap's `systemUserId` means the contact owner. */
+  assignTo?: string | null;
 }
 
 export interface HttpContent {
