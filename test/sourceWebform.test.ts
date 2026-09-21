@@ -101,7 +101,9 @@ describe('createWebformSource', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(ContentNotFoundError);
     expect((error as Error).message).toBe(
-      'web form 999 is not listed by /crm/rest/v2/webforms — it may be deleted, archived, or a form type the API does not list',
+      'web form 999 is not listed by /crm/rest/v2/webforms — campaign forms appear there only once ' +
+        'their campaign is published with the form goal ready; otherwise it may have been deleted. ' +
+        'Rebuild it by hand from Keap if it is needed.',
     );
   });
 });

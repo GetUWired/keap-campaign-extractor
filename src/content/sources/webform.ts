@@ -80,13 +80,15 @@ export function createWebformSource(): ContentSource {
     async fetch(key, ctx) {
       const entry = (await load(ctx)).get(key.id);
       if (entry === undefined) {
-        // Not ContentNotFoundError: the v2 list matched only 63 of 113 referenced
-        // webformIds in the enrichment spike (docs/spike-findings.md ~line 655), so
-        // an id absent from it is not proven deleted — it may be a form type the
-        // list does not cover. A plain Error records `failed` and is retried on
-        // the next run, rather than being asserted as a finding.
+        // Not ContentNotFoundError: a form built inside a campaign enters the v2 list
+        // only once its campaign is published with the form goal ready (confirmed
+        // live on se232 — docs/spike-findings.md §18), so an absent id is usually a
+        // draft, not a deleted form. A plain Error records `failed` with that reason
+        // and is retried on the next run.
         throw new Error(
-          `web form ${key.id} is not listed by ${WEBFORMS_PATH} — it may be deleted, archived, or a form type the API does not list`,
+          `web form ${key.id} is not listed by ${WEBFORMS_PATH} — campaign forms appear there ` +
+            'only once their campaign is published with the form goal ready; otherwise it may ' +
+            'have been deleted. Rebuild it by hand from Keap if it is needed.',
         );
       }
       return mapWebform(entry);

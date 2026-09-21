@@ -1289,3 +1289,7 @@ explanation: the five absent forms are the unpublished, unready or unconnected o
 migration needs most — those collecting contacts in published campaigns — are readable; drafts are
 recorded as `failed` with a reason saying why, and are rebuilt by hand if they are wanted at all.
 (Side effect of the test: campaign 11107 is now live, and its local extract is stale.)
+A second test separated the two: form 425's goal marked **ready and saved, but not published**
+(campaign 12841) — still absent from the list. Publication is what adds a campaign form to it;
+readiness alone does not. (Side effect: campaign 12841's draft changed and its local extract is
+stale.)
