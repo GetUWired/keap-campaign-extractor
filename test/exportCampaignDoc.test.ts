@@ -10,7 +10,10 @@ import {
   contentRef,
   slugify,
 } from '../src/export/paths.js';
-import { makeCampaign, makeNode, makeSequence } from './fixtures/graphFixtures.js';
+import type { DecisionCriteria } from '../src/parse/decisionHtml.js';
+import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
+
+const NOT_FETCHED = (key: ContentItemKey) => ({ kind: key.kind, id: key.id, status: 'notFetched' as const });
 
 describe('findMergeFields', () => {
   it('finds unique merge fields across texts, sorted', () => {
@@ -269,5 +272,170 @@ describe('buildCampaignDoc settings', () => {
       apiKey: REDACTED,
       postUrl: 'https://hooks.example.com/x',
     });
+  });
+});
+
+describe('tags', () => {
+  it('reads apply direction off a tag step, naming it from the catalog', () => {
+    const node = makeNode({
+      cellId: '10',
+      style: 'tag',
+      config: { isApply: 'true' },
+      references: { tagIds: ['4153'], tagCategoryIds: [] },
+    });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [node] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+      tagName: (id) => (id === '4153' ? 'Two Tickets' : null),
+    });
+    expect(doc.goals[0]?.tags).toEqual([{ id: '4153', name: 'Two Tickets', action: 'apply' }]);
+  });
+
+  it('reads remove direction, and marks a tag step with no isApply unspecified', () => {
+    const remove = makeNode({
+      cellId: '11',
+      style: 'tag',
+      config: { isApply: 'false' },
+      references: { tagIds: ['5'], tagCategoryIds: [] },
+    });
+    const noDirection = makeNode({
+      cellId: '12',
+      style: 'tag',
+      references: { tagIds: ['6'], tagCategoryIds: [] },
+    });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [remove, noDirection] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(doc.goals[0]?.tags).toEqual([{ id: '5', name: null, action: 'remove' }]);
+    expect(doc.goals[1]?.tags).toEqual([{ id: '6', name: null, action: 'unspecified' }]);
+  });
+
+  it('reads trigger direction off a tagApplied goal, one entry per tag', () => {
+    const node = makeNode({
+      cellId: '13',
+      style: 'tagApplied',
+      references: { tagIds: ['1', '2'], tagCategoryIds: [] },
+    });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [node] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(doc.goals[0]?.tags).toEqual([
+      { id: '1', name: null, action: 'trigger' },
+      { id: '2', name: null, action: 'trigger' },
+    ]);
+  });
+
+  it('never guesses a direction for tagIds on any other style', () => {
+    const node = makeNode({
+      cellId: '14',
+      style: 'purchaseSuccess',
+      references: { tagIds: ['9'], tagCategoryIds: [] },
+    });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [node] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(doc.goals[0]?.tags).toEqual([{ id: '9', name: null, action: 'unspecified' }]);
+  });
+
+  it('leaves every step untouched by tags with an empty list', () => {
+    const node = makeNode({ cellId: '15', style: 'email' });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [node] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(doc.goals[0]?.tags).toEqual([]);
+  });
+
+  it('names decision tag rules, the catalog winning over the parsed _text label', () => {
+    const rules: DecisionCriteria = {
+      decisionIds: [],
+      flowIds: [],
+      elseOptions: [],
+      elseSelected: null,
+      warnings: [],
+      wrappers: [
+        {
+          index: 0,
+          decisionId: null,
+          flowId: null,
+          primaryKey: null,
+          secondaryKey: null,
+          secondaryKeyId: null,
+          any: [
+            {
+              groupId: '1',
+              all: [
+                {
+                  ruleId: '1',
+                  subject: null,
+                  subjectLabel: null,
+                  category: 'tags_FieldCategory',
+                  categoryLabel: null,
+                  field: null,
+                  fieldLabel: null,
+                  constraint: null,
+                  constraintLabel: null,
+                  values: [{ id: '77', label: 'VIP' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const decision = makeDecision({ cellId: '20', branches: [{ decisionId: '1', flowId: '2', rules }] });
+
+    const withoutCatalog = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ decisions: [decision] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(withoutCatalog.decisions[0]?.tags).toEqual([{ id: '77', name: 'VIP' }]);
+
+    const withCatalog = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ decisions: [decision] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+      tagName: (id) => (id === '77' ? 'VIP Customer' : null),
+    });
+    expect(withCatalog.decisions[0]?.tags).toEqual([{ id: '77', name: 'VIP Customer' }]);
+  });
+
+  it('entity-decodes step and goal names', () => {
+    const node = makeNode({
+      cellId: '30',
+      style: 'purchaseSuccess',
+      name: "TRIP 1: 2nd traveler&#39;s info",
+    });
+    const doc = buildCampaignDoc({
+      funnelId: '1',
+      normalized: makeCampaign({ goals: [node] }),
+      summary: null,
+      publishNodes: [],
+      resolve: NOT_FETCHED,
+    });
+    expect(doc.goals[0]?.name).toBe("TRIP 1: 2nd traveler's info");
   });
 });

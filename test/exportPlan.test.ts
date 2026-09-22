@@ -218,3 +218,74 @@ describe('planExport', () => {
     for (const file of plan.files) expect(file.path).not.toMatch(/(^\/|\.\.)/);
   });
 });
+
+describe('planExport tags', () => {
+  const applyTag = makeNode({
+    cellId: '30',
+    style: 'tag',
+    parent: '5',
+    config: { isApply: 'true' },
+    references: { tagIds: ['4153'], tagCategoryIds: [] },
+  });
+  const triggerTag = makeNode({
+    cellId: '31',
+    style: 'tagApplied',
+    parent: '5',
+    references: { tagIds: ['4153'], tagCategoryIds: [] },
+  });
+
+  const tagInput = (overrides: Partial<ExportInput> = {}): ExportInput =>
+    input({
+      campaigns: [
+        campaign('1', 'Applies It', [applyTag]),
+        campaign('2', 'Triggers On It', [triggerTag]),
+      ],
+      items: new Map(),
+      statuses: new Map(),
+      ...overrides,
+    });
+
+  it('writes an account-level tags.json with names, sorted by numeric id', () => {
+    const plan = planExport(tagInput({ tagNames: new Map([['4153', 'Two Tickets']]) }));
+    const files = byPath(plan.files);
+    expect(json(files.get('tags.json'))).toEqual([
+      {
+        id: '4153',
+        name: 'Two Tickets',
+        appliedBy: ['1'],
+        removedBy: [],
+        triggers: ['2'],
+        testedBy: [],
+        otherUses: [],
+      },
+    ]);
+  });
+
+  it('carries the catalog name onto each campaign doc step tag', () => {
+    const plan = planExport(tagInput({ tagNames: new Map([['4153', 'Two Tickets']]) }));
+    const files = byPath(plan.files);
+    const doc = json(files.get('campaigns/1-applies-it/campaign.json'));
+    expect(doc.sequences[0].steps[0].tags).toEqual([{ id: '4153', name: 'Two Tickets', action: 'apply' }]);
+  });
+
+  it('names every tag null and still writes tags.json when tagNames is absent', () => {
+    const plan = planExport(tagInput());
+    const files = byPath(plan.files);
+    expect(json(files.get('tags.json'))).toEqual([
+      {
+        id: '4153',
+        name: null,
+        appliedBy: ['1'],
+        removedBy: [],
+        triggers: ['2'],
+        testedBy: [],
+        otherUses: [],
+      },
+    ]);
+  });
+
+  it('adds tagCount to the manifest', () => {
+    const plan = planExport(tagInput({ tagNames: new Map([['4153', 'Two Tickets']]) }));
+    expect(plan.manifest.tagCount).toBe(1);
+  });
+});

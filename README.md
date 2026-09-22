@@ -395,6 +395,7 @@ any content kind is read through the REST API — it says which before starting)
 export/se232/
   manifest.json          counts, and any content that could not be fetched
   merge-fields.json      every ~Contact.X~ style merge field, to map onto the new platform
+  tags.json              every tag a campaign uses: name, and which campaigns apply, remove, trigger on or test it
   campaigns/<id>-<name>/
     campaign.json        goals, sequences, steps, decisions, tasks and canvas notes
     emails/<id>/         email.json (to, cc, bcc, subject…), body.html, body.txt
@@ -405,6 +406,10 @@ export/se232/
 
 Content used by several campaigns is copied into each and lists the others under `sharedWith`.
 HTML is never modified; `assets.json` maps each original URL to its local file.
+
+Tag names need `artifacts/<app>/entities.json` — run `npm run enrich -- --app se232` first. Without
+it, `export` still writes `tags.json` and every step's `tags`, but names fall back to whatever a
+decision's criteria happened to label the tag, and `export`'s output says so.
 
 **HTTP step credentials are redacted** and listed under `redacted` in each file: secret-looking
 headers, query parameters, form fields, and keys in JSON or form-encoded bodies. A body that is

@@ -8,7 +8,7 @@ import { CONTENT_KINDS, type ContentItemKey, type ContentKind, itemKey } from '.
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { NormalizedNode } from '../normalize/nodes.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
-import { type ResolvedContent, buildCampaignDoc, draftNodesOf } from './campaignDoc.js';
+import { type ResolvedContent, type TagNameLookup, buildCampaignDoc, draftNodesOf } from './campaignDoc.js';
 import { htmlToText } from './htmlText.js';
 import { findMergeFields } from './mergeFields.js';
 import {
@@ -41,6 +41,8 @@ export interface ExportInput {
   /** Path on disk of a stored asset file. */
   assetSource: (file: string) => string;
   readText: (path: string) => string;
+  /** Tag display names by id, typically loaded from the enrichment catalog. Absent → every tag name is null. */
+  tagNames?: Map<string, string>;
 }
 
 type KindCounts = { exported: number; failed: number; notFound: number; notFetched: number };
@@ -53,7 +55,19 @@ export interface Manifest {
   campaignCount: number;
   content: Record<ContentKind, KindCounts>;
   assets: Record<AssetStatus, number>;
+  tagCount: number;
   campaigns: { funnelId: string; name: string | null; folder: string; missingContent: number }[];
+}
+
+/** Every campaign that applies, removes, triggers on, or tests one tag — the account-level tags.json entry. */
+export interface TagUsage {
+  id: string;
+  name: string | null;
+  appliedBy: string[];
+  removedBy: string[];
+  triggers: string[];
+  testedBy: string[];
+  otherUses: string[];
 }
 
 export interface ExportPlan {
@@ -62,11 +76,32 @@ export interface ExportPlan {
 }
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+const byNumericId = (a: string, b: string): number => Number(a) - Number(b);
 
 function uniqueKeys(keys: ContentItemKey[]): ContentItemKey[] {
   const seen = new Map<string, ContentItemKey>();
   for (const key of keys) if (!seen.has(itemKey(key))) seen.set(itemKey(key), key);
   return [...seen.values()];
+}
+
+interface TagAgg {
+  name: string | null;
+  appliedBy: Set<string>;
+  removedBy: Set<string>;
+  triggers: Set<string>;
+  testedBy: Set<string>;
+  otherUses: Set<string>;
+}
+
+function emptyAgg(): TagAgg {
+  return {
+    name: null,
+    appliedBy: new Set(),
+    removedBy: new Set(),
+    triggers: new Set(),
+    testedBy: new Set(),
+    otherUses: new Set(),
+  };
 }
 
 /**
@@ -81,6 +116,18 @@ export function planExport(input: ExportInput): ExportPlan {
   const accountAssets = new Map<string, AssetStatus>();
   const mergeIndex = new Map<string, Set<string>>();
   const manifestCampaigns: Manifest['campaigns'] = [];
+  const tagIndex = new Map<string, TagAgg>();
+  const tagName: TagNameLookup | undefined = input.tagNames
+    ? (id) => input.tagNames?.get(id) ?? null
+    : undefined;
+  const tagAgg = (id: string): TagAgg => {
+    let agg = tagIndex.get(id);
+    if (!agg) {
+      agg = emptyAgg();
+      tagIndex.set(id, agg);
+    }
+    return agg;
+  };
 
   const perCampaign = input.campaigns.map((campaign) => ({
     campaign,
@@ -118,7 +165,27 @@ export function planExport(input: ExportInput): ExportPlan {
       summary: campaign.summary,
       publishNodes: campaign.publishNodes,
       resolve,
+      tagName,
     });
+
+    const stepTags = [...doc.goals, ...doc.sequences.flatMap((s) => s.steps), ...doc.publishedOnly].flatMap(
+      (step) => step.tags,
+    );
+    for (const tag of stepTags) {
+      const agg = tagAgg(tag.id);
+      if (tag.name !== null) agg.name = tag.name;
+      if (tag.action === 'apply') agg.appliedBy.add(campaign.funnelId);
+      else if (tag.action === 'remove') agg.removedBy.add(campaign.funnelId);
+      else if (tag.action === 'trigger') agg.triggers.add(campaign.funnelId);
+      else agg.otherUses.add(campaign.funnelId);
+    }
+    for (const decision of doc.decisions) {
+      for (const tag of decision.tags) {
+        const agg = tagAgg(tag.id);
+        if (tag.name !== null) agg.name = tag.name;
+        agg.testedBy.add(campaign.funnelId);
+      }
+    }
 
     const campaignMerge = new Set(doc.mergeFields);
     const campaignAssets = new Map<string, Set<string>>();
@@ -258,6 +325,19 @@ export function planExport(input: ExportInput): ExportPlan {
   const assetCounts: Record<AssetStatus, number> = { downloaded: 0, failed: 0, tooLarge: 0, skipped: 0 };
   for (const status of accountAssets.values()) assetCounts[status]++;
 
+  const tags: TagUsage[] = [...tagIndex]
+    .sort(([a], [b]) => byNumericId(a, b))
+    .map(([id, agg]) => ({
+      id,
+      name: agg.name,
+      appliedBy: [...agg.appliedBy].sort(byNumericId),
+      removedBy: [...agg.removedBy].sort(byNumericId),
+      triggers: [...agg.triggers].sort(byNumericId),
+      testedBy: [...agg.testedBy].sort(byNumericId),
+      otherUses: [...agg.otherUses].sort(byNumericId),
+    }));
+  files.push({ path: 'tags.json', data: json(tags) });
+
   const manifest: Manifest = {
     formatVersion: 1,
     app: input.app,
@@ -266,6 +346,7 @@ export function planExport(input: ExportInput): ExportPlan {
     campaignCount: input.campaigns.length,
     content,
     assets: assetCounts,
+    tagCount: tags.length,
     campaigns: manifestCampaigns,
   };
   files.push({ path: 'manifest.json', data: json(manifest) });

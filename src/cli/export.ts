@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { EntityCatalog } from '../api/catalog.js';
 import { normalizeAppName, normalizeFunnelId } from '../app.js';
 import { assetFilePathFor, loadAssetIndex } from '../content/assets/assetStore.js';
 import { campaignRefs, loadCampaignNodes } from '../content/collect.js';
@@ -12,6 +13,7 @@ import { draftNodesOf } from '../export/campaignDoc.js';
 import { type ExportCampaignInput, planExport } from '../export/plan.js';
 import { writeExport } from '../export/write.js';
 import type { NormalizedCampaign } from '../normalize/campaign.js';
+import { tagLabels } from '../normalize/graphEdges.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
 
 interface Args {
@@ -103,6 +105,33 @@ async function main(): Promise<void> {
   );
   const assetIndex = await loadAssetIndex(args.app);
 
+  // Tag names come from the enrichment catalog first — it is the only source
+  // that resolves every tag, not just the ones a decision happens to route on.
+  // Decision-criteria labels (tagLabels) fill in tags the catalog lacks: se232
+  // has no catalog at all but 464 decisions carrying _text labels.
+  const tagNames = new Map<string, string>();
+  const catalogPath = join('artifacts', args.app, 'entities.json');
+  if (existsSync(catalogPath)) {
+    try {
+      const catalog = JSON.parse(await readFile(catalogPath, 'utf8')) as EntityCatalog;
+      for (const entity of catalog.entities) {
+        if (entity.kind === 'tag' && entity.name !== null) {
+          tagNames.set(entity.id.slice('tag:'.length), entity.name);
+        }
+      }
+    } catch {
+      console.log(`  warning: ${catalogPath} is unreadable — tag names come from decision labels only`);
+    }
+  } else {
+    console.log(
+      '  note: no entities.json — tag names come from decision labels only. Run:  ' +
+        `npm run enrich -- --app ${args.app}`,
+    );
+  }
+  for (const [id, label] of tagLabels(campaigns.map((c) => c.normalized))) {
+    if (!tagNames.has(id)) tagNames.set(id, label);
+  }
+
   const plan = planExport({
     app: args.app,
     exportedAt: new Date().toISOString(),
@@ -113,6 +142,7 @@ async function main(): Promise<void> {
     assets: assetIndex.assets,
     assetSource: (file) => assetFilePathFor(args.app, file),
     readText: (path) => readFileSync(path, 'utf8'),
+    tagNames,
   });
 
   // --funnel exports into its own folder, so it never replaces a full export.
@@ -132,6 +162,13 @@ async function main(): Promise<void> {
     `  assets: ${m.assets.downloaded} downloaded, ${m.assets.failed} failed, ` +
       `${m.assets.tooLarge} too large, ${m.assets.skipped} skipped`,
   );
+  const tagsFile = plan.files.find((f) => f.path === 'tags.json');
+  const namedTags =
+    tagsFile && 'data' in tagsFile
+      ? (JSON.parse(tagsFile.data.toString()) as { name: string | null }[]).filter((t) => t.name !== null)
+          .length
+      : 0;
+  console.log(`  tags: ${m.tagCount} (${namedTags} named)`);
   if (m.secretsIncluded) {
     console.log('\n  WARNING: --include-secrets was set. HTTP steps contain live credentials.');
     console.log('  Treat this export as a secret. manifest.json records secretsIncluded: true.');
