@@ -368,8 +368,10 @@ It also does not perform deletions or merges. It has no write access to Keap at 
 ## Step 8 — Export campaign content (migration)
 
 **What is read today.** Emails (from, to, cc, bcc, subject, HTML and text — through the REST API),
-web forms (name, hosted URL, redirect or thank-you setting — the API has no field list, and the
-record says `fieldsAvailable: false`), SMS messages, Apply Note templates, and HTTP Request steps.
+web forms (name, hosted URL, redirect or thank-you setting from the REST API, plus fields and HTML
+fetched anonymously from the form's public page where Keap serves one — otherwise the record says
+`fieldsAvailable: false` and carries `pageError`), SMS messages, Apply Note templates, and HTTP
+Request steps.
 Emails and web forms need `KEAP_API_KEY`; the rest use your login session.
 
 **Not read yet**, and listed as NOT FETCHED in every run and as `notFetched` in the export: landing

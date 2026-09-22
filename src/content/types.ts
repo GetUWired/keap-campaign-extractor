@@ -113,6 +113,8 @@ export interface FormField {
   required: boolean | null;
   hidden: boolean;
   defaultValue: string | null;
+  /** Choice values, for a select, radio group or grouped checkbox. */
+  options?: string[];
 }
 
 /** HTML, where Keap exposes it, is a separate file: form.html. */
@@ -130,6 +132,8 @@ export interface FormContent {
    * "unknown", not "a form without fields" — the export must not read it as the latter.
    */
   fieldsAvailable?: boolean;
+  /** Why the public page did not yield fields: no URL, a fetch failure, or no `<form>` found. */
+  pageError?: string;
 }
 
 export interface SmsContent {
