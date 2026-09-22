@@ -120,6 +120,26 @@ describe('parseWebformPage', () => {
     ]);
   });
 
+  it('reads select options from their text when they carry no value attribute', () => {
+    const html = `<form>
+      <select name="inf_field_State">
+        <option>California</option>
+        <option>New York</option>
+      </select>
+    </form>`;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      {
+        name: 'inf_field_State',
+        label: null,
+        type: 'select',
+        required: false,
+        hidden: false,
+        defaultValue: null,
+        options: ['California', 'New York'],
+      },
+    ]);
+  });
+
   it('groups radio inputs sharing a name into one field', () => {
     const html = `<form>
       <input type="radio" name="inf_option_Size" value="S" />
@@ -163,6 +183,25 @@ describe('parseWebformPage', () => {
     const html = `<form><input type="checkbox" name="inf_option_Consent" value="yes" /></form>`;
     expect(parseWebformPage(html)?.fields).toEqual([
       { name: 'inf_option_Consent', label: null, type: 'checkbox', required: false, hidden: false, defaultValue: null },
+    ]);
+  });
+
+  it('groups checkboxes sharing a name into one field, like radios', () => {
+    const html = `<form>
+      <input type="checkbox" name="inf_option_Interests" value="Beach" />
+      <input type="checkbox" name="inf_option_Interests" value="City" />
+      <input type="checkbox" name="inf_option_Interests" value="Cruise" />
+    </form>`;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      {
+        name: 'inf_option_Interests',
+        label: null,
+        type: 'checkbox',
+        required: false,
+        hidden: false,
+        defaultValue: null,
+        options: ['Beach', 'City', 'Cruise'],
+      },
     ]);
   });
 

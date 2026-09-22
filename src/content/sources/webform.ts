@@ -59,6 +59,8 @@ interface FieldBuilder {
   requiredAttr: boolean;
   defaultValue: string | null;
   labelId: string | null;
+  /** How many `input`/`select`/`textarea` elements share this name. */
+  occurrences: number;
   options?: string[];
 }
 
@@ -95,9 +97,11 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
 
     const tagName = element.tagName.toLowerCase();
     const inputType = tagName === 'input' ? ($el.attr('type') ?? 'text').toLowerCase() : tagName;
-    // Radio buttons are the one input type Keap's forms use as a same-name group;
-    // a single field with every option, not one field per button.
-    const groupable = tagName === 'input' && inputType === 'radio';
+    // Radio buttons and checkboxes are the input types Keap's forms use as a
+    // same-name group; a single field with every option, not one field per
+    // button. A checkbox name that occurs only once stays a plain field below
+    // (no `options`) — grouping only shows up once there is something to group.
+    const groupable = tagName === 'input' && (inputType === 'radio' || inputType === 'checkbox');
 
     let builder = builders.get(name);
     if (builder === undefined) {
@@ -108,11 +112,13 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
         requiredAttr: false,
         defaultValue: inputType === 'hidden' ? ($el.attr('value') ?? null) : null,
         labelId: $el.attr('id') ?? null,
+        occurrences: 0,
       };
       if (groupable) builder.options = [];
       builders.set(name, builder);
       order.push(name);
     }
+    builder.occurrences++;
 
     if ($el.attr('required') !== undefined) builder.requiredAttr = true;
 
@@ -145,7 +151,10 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
       hidden: builder.hidden,
       defaultValue: builder.defaultValue,
     };
-    if (builder.options !== undefined) field.options = builder.options;
+    // A single checkbox reports no options at all — only a name that occurs more
+    // than once (an actual group) does. Radios and selects always keep theirs.
+    const showOptions = builder.type !== 'checkbox' || builder.occurrences > 1;
+    if (builder.options !== undefined && showOptions) field.options = builder.options;
     return field;
   });
 
