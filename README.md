@@ -401,7 +401,7 @@ export/se232/
   campaigns/<id>-<name>/
     campaign.json        goals, sequences, steps, decisions, tasks and canvas notes
     emails/<id>/         email.json (to, cc, bcc, subject…), body.html, body.txt
-    forms/<id>/          form.json — no HTML or field list; the API exposes neither
+    forms/<id>/          form.json (fields, when the form's public page has them) and form.html
     sms/ notes/ http/    one JSON file each
     assets/              every image and file the campaign's content uses, plus assets.json
 ```
@@ -409,9 +409,17 @@ export/se232/
 Content used by several campaigns is copied into each and lists the others under `sharedWith`.
 HTML is never modified; `assets.json` maps each original URL to its local file.
 
+`form.html` is Keap's live public form — submitting it creates a real contact and can start the
+campaign; use it as a reference, do not submit it.
+
+Forms fetched before this version carry no fields or `form.html`; re-fetch them with
+`npm run fetch-content -- --app se232 --kinds form --force`, because `fetch-content` otherwise
+skips items it already has stored.
+
 Tag names need `artifacts/<app>/entities.json` — run `npm run enrich -- --app se232` first. Without
 it, `export` still writes `tags.json` and every step's `tags`, but names fall back to whatever a
-decision's criteria happened to label the tag, and `export`'s output says so.
+decision's criteria happened to label the tag, and `export`'s output says so. A tag in `tags.json`
+with `name: null` is not in the account's tag list — most likely deleted.
 
 **HTTP step credentials are redacted** and listed under `redacted` in each file: secret-looking
 headers, query parameters, form fields, and keys in JSON or form-encoded bodies. A body that is

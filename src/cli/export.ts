@@ -107,8 +107,9 @@ async function main(): Promise<void> {
 
   // Tag names come from the enrichment catalog first — it is the only source
   // that resolves every tag, not just the ones a decision happens to route on.
-  // Decision-criteria labels (tagLabels) fill in tags the catalog lacks: se232
-  // has no catalog at all but 464 decisions carrying _text labels.
+  // Decision-criteria labels (tagLabels) fill in tags the catalog lacks. Names
+  // come from artifacts/<app>/entities.json when present; otherwise every
+  // name falls back to a decision's criteria label, if it has one.
   const tagNames = new Map<string, string>();
   const catalogPath = join('artifacts', args.app, 'entities.json');
   if (existsSync(catalogPath)) {
