@@ -12,3 +12,5 @@ that could identify a person or client has been replaced: staff names are `User 
 | `note-editor.html` | `GET /app/noteFunnel/edit?marketingNoteId={id}&mayPickUser=false` — markup verbatim, names scrubbed, title/body replaced |
 | `http-request-empty.html` | `GET /app/httpRequestFunnel/requests/{id}` — verbatim (an unconfigured step) |
 | `http-request-configured.html` | The empty capture with values filled in using the editor's own row template. **Synthetic**: no configured HTTP Request existed to capture, so the populated-row markup is an assumption the live check must confirm. |
+| `webform-page.html` | A FUNNEL web form's public hosted page (`webform_url`), fetched anonymously — markup verbatim, brand name and account name replaced |
+| `webform-page-error.html` | What a legacy form's public page returned on `jordan` ("Error 640", no `<form>`) — account name replaced |
