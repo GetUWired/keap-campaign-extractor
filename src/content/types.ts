@@ -115,6 +115,8 @@ export interface FormField {
   defaultValue: string | null;
   /** Choice values, for a select, radio group or grouped checkbox. */
   options?: string[];
+  /** Each choice's visible text, parallel to `options`. */
+  optionLabels?: string[];
 }
 
 /** HTML, where Keap exposes it, is a separate file: form.html. */

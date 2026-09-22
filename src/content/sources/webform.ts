@@ -1,7 +1,7 @@
 import { load as loadHtml } from 'cheerio';
 import { cleanName } from '../../parse/cells.js';
 import { decodeEntities } from '../../render/text.js';
-import { anonymousFetcher } from '../assets/download.js';
+import { type AssetFetcher, anonymousFetcher } from '../assets/download.js';
 import { classifyUrl } from '../assets/discover.js';
 import type { ContentSource, FetchContext, FetchedContent, FormContent, FormField } from '../types.js';
 
@@ -62,19 +62,11 @@ interface FieldBuilder {
   /** How many `input`/`select`/`textarea` elements share this name. */
   occurrences: number;
   options?: string[];
+  /** Each option's visible text, parallel to `options`. */
+  optionLabels?: string[];
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-/** The text of the first `<label for="id">` found, entity-decoded and trimmed; null if none. */
-function labelFor($: ReturnType<typeof loadHtml>, id: string): string | null {
-  let found: string | null = null;
-  $('label').each((_, element) => {
-    if (found !== null) return;
-    if ($(element).attr('for') === id) found = decodeEntities($(element).text()).trim();
-  });
-  return found;
-}
 
 /**
  * Parses a form's hosted page: the first `<form>` on it, or null when the page
@@ -86,6 +78,21 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
   const $ = loadHtml(html);
   const form = $('form').first();
   if (form.length === 0) return null;
+
+  /**
+   * The text of the first `<label for="id">` found within the form,
+   * entity-decoded and trimmed; null if none. Scoped to the form — Keap's
+   * page carries labels outside it too (nav, footer) that must never match a
+   * field by coincidence.
+   */
+  const labelFor = (id: string): string | null => {
+    let found: string | null = null;
+    form.find('label').each((_, element) => {
+      if (found !== null) return;
+      if ($(element).attr('for') === id) found = decodeEntities($(element).text()).trim();
+    });
+    return found;
+  };
 
   const order: string[] = [];
   const builders = new Map<string, FieldBuilder>();
@@ -114,7 +121,10 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
         labelId: $el.attr('id') ?? null,
         occurrences: 0,
       };
-      if (groupable) builder.options = [];
+      if (groupable) {
+        builder.options = [];
+        builder.optionLabels = [];
+      }
       builders.set(name, builder);
       order.push(name);
     }
@@ -126,21 +136,39 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
       const value = $el.attr('value');
       if (value !== undefined && value !== '' && !builder.options?.includes(value)) {
         builder.options?.push(value);
+        const optionId = $el.attr('id');
+        const optionLabel = optionId !== undefined ? labelFor(optionId) : null;
+        builder.optionLabels?.push(optionLabel ?? value);
       }
     }
 
     if (tagName === 'select') {
-      builder.options = $el
+      const options = $el
         .find('option')
         .toArray()
-        .map((option) => ($(option).attr('value') ?? $(option).text()).trim())
-        .filter((value) => value !== '');
+        .map((option) => ({
+          value: ($(option).attr('value') ?? $(option).text()).trim(),
+          label: decodeEntities($(option).text()).trim(),
+        }))
+        .filter(({ value }) => value !== '');
+      builder.options = options.map(({ value }) => value);
+      builder.optionLabels = options.map(({ label }) => label);
     }
   });
 
   const fields: FormField[] = order.map((name) => {
     const builder = builders.get(name) as FieldBuilder;
-    const rawLabel = builder.labelId !== null ? labelFor($, builder.labelId) : null;
+    // Grouped fields (radio, and checkbox with 2+ occurrences) carry the
+    // group's own label under the field *name*, not any one option's id — the
+    // markup is `<label for="inf_option_Size">Size *</label>` alongside each
+    // option's own `<label for="inf_option_Size_1">Small</label>`. Falls back
+    // to the first option's label when there is no group-level label.
+    const isGroup = builder.type === 'radio' || (builder.type === 'checkbox' && builder.occurrences > 1);
+    const rawLabel = isGroup
+      ? (labelFor(builder.name) ?? (builder.labelId !== null ? labelFor(builder.labelId) : null))
+      : builder.labelId !== null
+        ? labelFor(builder.labelId)
+        : null;
     const endsWithStar = rawLabel !== null && rawLabel.endsWith('*');
     const label = rawLabel === null ? null : rawLabel.replace(/\*$/, '').trim();
     const field: FormField = {
@@ -155,6 +183,7 @@ export function parseWebformPage(html: string): { fields: FormField[] } | null {
     // than once (an actual group) does. Radios and selects always keep theirs.
     const showOptions = builder.type !== 'checkbox' || builder.occurrences > 1;
     if (builder.options !== undefined && showOptions) field.options = builder.options;
+    if (builder.optionLabels !== undefined && showOptions) field.optionLabels = builder.optionLabels;
     return field;
   });
 
@@ -176,9 +205,13 @@ export interface WebformSourceDeps {
  * form's public page), following redirects itself — re-running `classifyUrl`
  * on every `Location` so a redirect to a private address is refused — at most
  * `MAX_PAGE_REDIRECTS` hops.
+ *
+ * `fetcher` is injectable so the redirect loop below can be tested without the
+ * network — see `downloadAsset` in `src/content/assets/download.ts` for its
+ * twin: the same hop-by-hop, re-classify-every-Location loop, over asset
+ * bytes instead of a page body.
  */
-function defaultFetchPage(): (url: string) => Promise<FetchedPage> {
-  const fetcher = anonymousFetcher();
+export function defaultFetchPage(fetcher: AssetFetcher = anonymousFetcher()): (url: string) => Promise<FetchedPage> {
   return async (url) => {
     let currentUrl = url;
     let redirects = 0;

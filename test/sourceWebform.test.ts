@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { ApiClient } from '../src/api/client.js';
-import { WEBFORMS_PATH, createWebformSource, parseWebformPage } from '../src/content/sources/webform.js';
+import type { AssetFetcher, AssetResponse } from '../src/content/assets/download.js';
+import { WEBFORMS_PATH, createWebformSource, defaultFetchPage, parseWebformPage } from '../src/content/sources/webform.js';
 import { ContentNotFoundError, type ContentItemKey, type FetchContext, type FormField } from '../src/content/types.js';
 
 const list = (JSON.parse(readFileSync('test/fixtures/content/webforms-list.json', 'utf8')) as {
@@ -116,6 +117,7 @@ describe('parseWebformPage', () => {
         hidden: false,
         defaultValue: null,
         options: ['CA', 'NY'],
+        optionLabels: ['California', 'New York'],
       },
     ]);
   });
@@ -136,6 +138,7 @@ describe('parseWebformPage', () => {
         hidden: false,
         defaultValue: null,
         options: ['California', 'New York'],
+        optionLabels: ['California', 'New York'],
       },
     ]);
   });
@@ -154,7 +157,77 @@ describe('parseWebformPage', () => {
         hidden: false,
         defaultValue: null,
         options: ['S', 'M'],
+        optionLabels: ['S', 'M'],
       },
+    ]);
+  });
+
+  it('takes the group label from <label for="<name>">, with its own trailing * and option labels', () => {
+    const html = `<form>
+      <label for="inf_option_Size">Size *</label>
+      <input id="inf_option_Size_1" name="inf_option_Size" type="radio" value="101"><label for="inf_option_Size_1">Small</label>
+      <input id="inf_option_Size_2" name="inf_option_Size" type="radio" value="102"><label for="inf_option_Size_2">Medium</label>
+    </form>`;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      {
+        name: 'inf_option_Size',
+        label: 'Size',
+        type: 'radio',
+        required: true,
+        options: ['101', '102'],
+        optionLabels: ['Small', 'Medium'],
+        hidden: false,
+        defaultValue: null,
+      },
+    ]);
+  });
+
+  it('takes the group label from <label for="<name>"> for a checkbox group too', () => {
+    const html = `<form>
+      <label for="inf_option_Interests">Interests</label>
+      <input id="inf_option_Interests_1" name="inf_option_Interests" type="checkbox" value="Beach"><label for="inf_option_Interests_1">Beach</label>
+      <input id="inf_option_Interests_2" name="inf_option_Interests" type="checkbox" value="City"><label for="inf_option_Interests_2">City</label>
+    </form>`;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      {
+        name: 'inf_option_Interests',
+        label: 'Interests',
+        type: 'checkbox',
+        required: false,
+        options: ['Beach', 'City'],
+        optionLabels: ['Beach', 'City'],
+        hidden: false,
+        defaultValue: null,
+      },
+    ]);
+  });
+
+  it('falls back to the first option label when the group has no <label for="<name>">', () => {
+    const html = `<form>
+      <input id="inf_option_Size_1" name="inf_option_Size" type="radio" value="101"><label for="inf_option_Size_1">Small</label>
+      <input id="inf_option_Size_2" name="inf_option_Size" type="radio" value="102"><label for="inf_option_Size_2">Medium</label>
+    </form>`;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      {
+        name: 'inf_option_Size',
+        label: 'Small',
+        type: 'radio',
+        required: false,
+        options: ['101', '102'],
+        optionLabels: ['Small', 'Medium'],
+        hidden: false,
+        defaultValue: null,
+      },
+    ]);
+  });
+
+  it('only searches for labels within the form, not the whole page', () => {
+    const html = `
+      <label for="inf_field_Email">Outside Email *</label>
+      <form><input id="inf_field_Email" name="inf_field_Email" type="email" /></form>
+    `;
+    expect(parseWebformPage(html)?.fields).toEqual([
+      { name: 'inf_field_Email', label: null, type: 'email', required: false, hidden: false, defaultValue: null },
     ]);
   });
 
@@ -201,6 +274,7 @@ describe('parseWebformPage', () => {
         hidden: false,
         defaultValue: null,
         options: ['Beach', 'City', 'Cruise'],
+        optionLabels: ['Beach', 'City', 'Cruise'],
       },
     ]);
   });
@@ -369,5 +443,94 @@ describe('createWebformSource', () => {
         'their campaign is published with the form goal ready; otherwise it may have been deleted. ' +
         'Rebuild it by hand from Keap if it is needed.',
     );
+  });
+});
+
+describe('defaultFetchPage', () => {
+  function respond(body: string, overrides: Partial<AssetResponse> = {}): AssetResponse {
+    const bytes = Buffer.from(body);
+    return {
+      status: 200,
+      contentType: 'text/html',
+      contentLength: bytes.length,
+      location: null,
+      body: async () => bytes,
+      ...overrides,
+    };
+  }
+
+  function redirect(location: string | null, overrides: Partial<AssetResponse> = {}): AssetResponse {
+    return {
+      status: 302,
+      contentType: null,
+      contentLength: null,
+      location,
+      body: async () => Buffer.alloc(0),
+      ...overrides,
+    };
+  }
+
+  function stub(responses: AssetResponse[]): { fetcher: AssetFetcher; urls: string[] } {
+    const urls: string[] = [];
+    let i = 0;
+    const fetcher: AssetFetcher = async (url) => {
+      urls.push(url);
+      const response = responses[i] ?? responses[responses.length - 1];
+      i++;
+      if (!response) throw new Error('no more stubbed responses');
+      return response;
+    };
+    return { fetcher, urls };
+  }
+
+  it('throws with a privateHost reason for a redirect to a private address', async () => {
+    const { fetcher } = stub([redirect('http://127.0.0.1/x')]);
+    await expect(defaultFetchPage(fetcher)('https://example.infusionsoft.com/app/form/abc')).rejects.toThrow(
+      /privateHost/,
+    );
+  });
+
+  it('gives up after too many redirects', async () => {
+    const { fetcher } = stub([
+      redirect('https://example.infusionsoft.com/1'),
+      redirect('https://example.infusionsoft.com/2'),
+      redirect('https://example.infusionsoft.com/3'),
+      redirect('https://example.infusionsoft.com/4'),
+      redirect('https://example.infusionsoft.com/5'),
+      redirect('https://example.infusionsoft.com/6'),
+    ]);
+    await expect(defaultFetchPage(fetcher)('https://example.infusionsoft.com/0')).rejects.toThrow(
+      'too many redirects',
+    );
+  });
+
+  it('throws for a 3xx with no Location header', async () => {
+    const { fetcher } = stub([redirect(null)]);
+    await expect(defaultFetchPage(fetcher)('https://example.infusionsoft.com/app/form/abc')).rejects.toThrow(
+      'HTTP 302',
+    );
+  });
+
+  it('follows chained redirects to a 200 and returns the body and final URL', async () => {
+    const { fetcher, urls } = stub([
+      redirect('https://example.infusionsoft.com/1'),
+      redirect('https://example.infusionsoft.com/2'),
+      redirect('https://example.infusionsoft.com/3'),
+      redirect('https://example.infusionsoft.com/4'),
+      respond('<form></form>'),
+    ]);
+    const result = await defaultFetchPage(fetcher)('https://example.infusionsoft.com/0');
+    expect(result).toEqual({
+      status: 200,
+      body: '<form></form>',
+      finalUrl: 'https://example.infusionsoft.com/4',
+    });
+    expect(urls).toEqual([
+      'https://example.infusionsoft.com/0',
+      'https://example.infusionsoft.com/1',
+      'https://example.infusionsoft.com/2',
+      'https://example.infusionsoft.com/3',
+      'https://example.infusionsoft.com/4',
+    ]);
   });
 });
