@@ -72,7 +72,39 @@ describe('analyzeBrokenReferences', () => {
   it('flags a campaign whose every trigger points at something missing', () => {
     const graph = withFindings(buildGraph([campaign]), ['tag:646']);
     const report = analyzeBrokenReferences('x', [campaign], graph);
-    expect(report.campaigns[0]?.allTriggersBroken).toBe(true);
+    expect(report.campaigns[0]?.allEntryPointsBroken).toBe(true);
+  });
+
+  it('does not call a campaign dead when a non-tag goal still works', () => {
+    // Counting only tag goals called campaigns dead that a purchase or
+    // link-click goal could still let people into.
+    const mixed = makeCampaign({
+      funnelId: '18',
+      goals: [
+        tagGoal('4', ['646'], 'Gone'),
+        makeNode({ cellId: '5', style: 'purchaseSuccess', name: 'Any purchase' }),
+      ],
+    });
+    const graph = withFindings(buildGraph([mixed]), ['tag:646']);
+    const report = analyzeBrokenReferences('x', [mixed], graph);
+    expect(report.campaigns[0]?.allEntryPointsBroken).toBe(false);
+    expect(report.campaigns[0]?.goalsWorking).toBe(1);
+  });
+
+  it('ignores a goal nobody configured, either way', () => {
+    // An unfinished template is not a campaign a deletion killed.
+    const half = makeCampaign({
+      funnelId: '19',
+      goals: [
+        tagGoal('4', ['646'], 'Gone'),
+        makeNode({ cellId: '5', style: 'purchaseSuccess', name: null }),
+      ],
+      unconfigured: ['5'],
+    });
+    const graph = withFindings(buildGraph([half]), ['tag:646']);
+    const report = analyzeBrokenReferences('x', [half], graph);
+    expect(report.campaigns[0]?.allEntryPointsBroken).toBe(true);
+    expect(report.campaigns[0]?.goalsWorking).toBe(0);
   });
 
   it('does not flag a campaign that still has one working way in', () => {
@@ -83,7 +115,7 @@ describe('analyzeBrokenReferences', () => {
     });
     const graph = withFindings(buildGraph([two]), ['tag:646']);
     const report = analyzeBrokenReferences('x', [two], graph);
-    expect(report.campaigns[0]?.allTriggersBroken).toBe(false);
+    expect(report.campaigns[0]?.allEntryPointsBroken).toBe(false);
   });
 
   it('puts campaigns that cannot start first, then live ones', () => {

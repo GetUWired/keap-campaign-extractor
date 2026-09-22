@@ -65,10 +65,19 @@ export interface BrokenCampaign {
   activeContacts: number | null;
   locations: BrokenLocation[];
   /**
-   * Every one of this campaign's tag triggers points at a missing tag, so
-   * nothing can enrol through them.
+   * No goal can still let anyone in, and at least one was killed by a deletion.
+   *
+   * Counting only tag goals was wrong twice over: it called campaigns dead that
+   * still had a working purchase or link-click goal, and missed ones whose web
+   * form goal pointed at a deleted form. A goal nobody configured counts as
+   * neither — it never worked, so its absence is not breakage, and a campaign
+   * made entirely of them is an unfinished template rather than a casualty.
    */
-  allTriggersBroken: boolean;
+  allEntryPointsBroken: boolean;
+  /** Goals that pointed only at entities the account no longer has. */
+  goalsKilled: number;
+  /** Goals that still reference something the account still has. */
+  goalsWorking: number;
 }
 
 export interface BrokenRefsReport {
@@ -129,19 +138,16 @@ export function analyzeBrokenReferences(
 
   const byEntity = new Map<string, BrokenLocation[]>();
   const byCampaign = new Map<string, BrokenLocation[]>();
-  // Every tag trigger per campaign, so a campaign with no way in can be named.
-  const triggers = new Map<string, { cellId: string; entityId: string }[]>();
+  // What each cell points at, so a goal of any kind can be judged.
+  const cellTargets = new Map<string, string[]>();
 
   for (const edge of graph.edges) {
     if (edge.derived === true) continue;
     if (!edge.from.startsWith('campaign:')) continue;
     const campaignId = edge.from.slice('campaign:'.length);
 
-    if (edge.kind === 'listens-for') {
-      const seen = triggers.get(campaignId) ?? [];
-      seen.push({ cellId: edge.viaCellId ?? '', entityId: edge.to });
-      triggers.set(campaignId, seen);
-    }
+    const cellKey = `${campaignId}/${edge.viaCellId ?? ''}`;
+    cellTargets.set(cellKey, [...(cellTargets.get(cellKey) ?? []), edge.to]);
 
     if (!missing.has(edge.to)) continue;
     const campaign = byId.get(campaignId);
@@ -187,20 +193,32 @@ export function analyzeBrokenReferences(
     .map(([campaignId, locations]) => {
       const campaign = byId.get(campaignId);
       const summary = summaryById.get(campaignId);
-      const listensFor = triggers.get(campaignId) ?? [];
+      const unconfigured = new Set(campaign?.unconfigured ?? []);
+
+      let goalsKilled = 0;
+      let goalsWorking = 0;
+      for (const goal of campaign?.goals ?? []) {
+        // Never filled in: it never let anyone in, so its state is not breakage.
+        if (unconfigured.has(goal.cellId)) continue;
+        const targets = cellTargets.get(`${campaignId}/${goal.cellId}`) ?? [];
+        if (targets.length > 0 && targets.every((t) => missing.has(t))) goalsKilled++;
+        else goalsWorking++;
+      }
+
       return {
         campaignId,
         campaignName: campaign?.name ?? null,
         status: statusOf(campaign, campaignId),
         activeContacts: summary?.activeContacts ?? null,
         locations,
-        allTriggersBroken:
-          listensFor.length > 0 && listensFor.every((t) => missing.has(t.entityId)),
+        allEntryPointsBroken: goalsKilled > 0 && goalsWorking === 0,
+        goalsKilled,
+        goalsWorking,
       };
     })
     .sort(
       (a, b) =>
-        Number(b.allTriggersBroken) - Number(a.allTriggersBroken) ||
+        Number(b.allEntryPointsBroken) - Number(a.allEntryPointsBroken) ||
         STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
         b.locations.length - a.locations.length,
     );

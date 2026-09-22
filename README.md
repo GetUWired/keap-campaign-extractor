@@ -407,8 +407,11 @@ Two distinctions it draws, both load-bearing:
 - **Ready vs never built.** A missing entity referenced by a step someone marked *ready* is
   breakage. One referenced only by unready steps is a half-built campaign. On se232 that is 229
   against 86 — collapsing them would turn 86 drafts into 86 emergencies.
-- **Campaigns with no working way in.** Where *every* tag goal listens for a tag that no longer
-  exists, nothing can enrol through any of them. se232 has **12**, five of them live.
+- **Campaigns with no working way in.** No goal can still let anyone in *and* at least one was
+  killed by a deletion. Goals of every kind count — a purchase or link-click goal that still works
+  keeps a campaign alive — and goals nobody configured count neither way, so a campaign made only of
+  those is an unfinished template rather than a casualty. se232 has **19**, twelve of them live,
+  none holding a single active contact.
 
 The consequence text is deliberately mechanical — *"this branch tests something that no longer
 exists"* — because what Keap does at runtime with a decision on a deleted tag was never observed

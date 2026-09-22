@@ -96,7 +96,7 @@ function filtered() {
   const rows = [];
   for (const campaign of DATA.campaigns) {
     if (!state.statuses.has(campaign.status)) continue;
-    if (state.onlyDead && !campaign.allTriggersBroken) continue;
+    if (state.onlyDead && !campaign.allEntryPointsBroken) continue;
     const nameHit =
       !!q &&
       ((campaign.campaignName ?? '').toLowerCase().includes(q) || campaign.campaignId.includes(q));
@@ -157,7 +157,7 @@ function campaignCard(row) {
   name.className = 'cname';
   summary.append(name, el('span', 'cid', '#' + campaign.campaignId));
   summary.append(el('span', 'pill ' + campaign.status, STATUS_LABEL[campaign.status] ?? campaign.status));
-  if (campaign.allTriggersBroken) summary.append(el('span', 'pill noway', 'no working way in'));
+  if (campaign.allEntryPointsBroken) summary.append(el('span', 'pill noway', 'no working way in'));
   const bits = [];
   if (campaign.activeContacts !== null) bits.push(campaign.activeContacts.toLocaleString() + ' active');
   bits.push(locations.length + ' broken');
@@ -201,7 +201,7 @@ function render() {
     const rows = filtered();
     campaignsView.replaceChildren();
     const locations = rows.reduce((n, r) => n + r.locations.length, 0);
-    const dead = rows.filter((r) => r.campaign.allTriggersBroken).length;
+    const dead = rows.filter((r) => r.campaign.allEntryPointsBroken).length;
     countLine.replaceChildren();
     countLine.append(
       'Showing ',
@@ -305,7 +305,7 @@ render();
 
 export function renderBrokenRefsHtml(report: BrokenRefsReport): string {
   const { counts } = report;
-  const dead = report.campaigns.filter((c) => c.allTriggersBroken);
+  const dead = report.campaigns.filter((c) => c.allEntryPointsBroken);
   const deadLive = dead.filter((c) => c.status === 'live').length;
 
   const stat = (n: number | string, k: string, cls = '') =>

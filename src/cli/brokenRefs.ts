@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     .join(', ');
   console.log(`    ${places}`);
   console.log(`  campaigns:         ${counts.campaigns}, of which ${counts.liveCampaigns} live`);
-  const dead = report.campaigns.filter((c) => c.allTriggersBroken);
+  const dead = report.campaigns.filter((c) => c.allEntryPointsBroken);
   console.log(
     `  no working way in: ${dead.length} campaigns, ${dead.filter((c) => c.status === 'live').length} of them live`,
   );

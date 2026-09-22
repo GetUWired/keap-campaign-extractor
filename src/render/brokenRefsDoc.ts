@@ -104,13 +104,14 @@ export function renderBrokenRefs(report: BrokenRefsReport): string {
     lines.push('');
   }
 
-  const dead = report.campaigns.filter((c) => c.allTriggersBroken);
+  const dead = report.campaigns.filter((c) => c.allEntryPointsBroken);
   if (dead.length > 0) {
     lines.push(
       '## Campaigns with no working way in',
       '',
-      'Every tag goal in these campaigns listens for a tag the account no longer has, so nothing',
-      'can enrol through them. Live ones are the ones to look at first.',
+      'No goal in these campaigns can still let anyone in, and at least one was killed by a',
+      'deletion. Goals nobody configured are not counted either way — a campaign made only of',
+      'those is an unfinished template, not a casualty. Live ones first.',
       '',
       '| Campaign | Id | Status | Active contacts |',
       '|---|---|---|---|',
@@ -135,7 +136,7 @@ export function renderBrokenRefs(report: BrokenRefsReport): string {
         : cell(campaign.campaignName);
     lines.push(`### ${name} (${campaign.campaignId})`, '');
     const bits = [`**${STATUS_LABEL[campaign.status]}**`];
-    if (campaign.allTriggersBroken) bits.push('**no working way in**');
+    if (campaign.allEntryPointsBroken) bits.push('**no working way in**');
     if (campaign.activeContacts !== null) bits.push(`${campaign.activeContacts} active contacts`);
     bits.push(`${campaign.locations.length} broken reference(s)`);
     lines.push(bits.join(' · '), '');
