@@ -20,6 +20,7 @@ during ordinary read-only runs. See [The read-only guard](#the-read-only-guard).
 - [Step 5 — Resolve names (optional)](#step-5--resolve-names-optional)
 - [Step 6 — Readable pages (optional)](#step-6--readable-pages-optional)
 - [Step 7 — Tag impact analysis](#step-7--tag-impact-analysis)
+- [Broken references](#broken-references)
 - [Step 8 — Export campaign content (migration)](#step-8--export-campaign-content-migration)
 - [Where everything lands](#where-everything-lands)
 - [Handing the report to someone](#handing-the-report-to-someone)
@@ -381,6 +382,37 @@ exactly that, and the word "safe" appears nowhere in it by design. This tool nar
 check by hand; it does not replace the checking, and it does not recommend deletions.
 
 It also does not perform deletions or merges. It has no write access to Keap at all.
+
+---
+
+## Broken references
+
+**The question this answers:** what is *already* broken — campaign steps, goals and decisions
+pointing at tags, products and forms the account no longer has? Keap deletes the entity and leaves
+the reference behind.
+
+```bash
+npm run broken-refs -- --app se232
+```
+
+Needs [step 5](#step-5--resolve-names-optional) and then [step 4](#step-4--normalize) again, in that
+order: the comparison is against the account's entity catalog, and the graph has to be rebuilt with
+it present. Without it the report says **nothing could be checked** rather than reporting a clean
+account — the two look identical from the outside and only one is good news.
+
+It writes `broken-refs.json`, `.md` and `.html` beside the tag impact reports.
+
+Two distinctions it draws, both load-bearing:
+
+- **Ready vs never built.** A missing entity referenced by a step someone marked *ready* is
+  breakage. One referenced only by unready steps is a half-built campaign. On se232 that is 229
+  against 86 — collapsing them would turn 86 drafts into 86 emergencies.
+- **Campaigns with no working way in.** Where *every* tag goal listens for a tag that no longer
+  exists, nothing can enrol through any of them. se232 has **12**, five of them live.
+
+The consequence text is deliberately mechanical — *"this branch tests something that no longer
+exists"* — because what Keap does at runtime with a decision on a deleted tag was never observed
+here, and a guess would read as fact to whoever acts on it.
 
 ---
 

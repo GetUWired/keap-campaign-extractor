@@ -17,6 +17,7 @@
     "export": "tsx src/cli/export.ts",
     "render": "tsx src/cli/render.ts",
     "tag-impact": "tsx src/cli/tagImpact.ts",
+    "broken-refs": "tsx src/cli/brokenRefs.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
