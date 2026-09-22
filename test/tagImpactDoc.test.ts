@@ -12,6 +12,7 @@ const location = (over: Partial<ImpactLocation> = {}): ImpactLocation => ({
   tagId: '646',
   tagName: 'Bought',
   group: null,
+  change: 'delete',
   kind: 'trigger',
   edgeKind: 'listens-for',
   cellId: '4',
@@ -36,6 +37,7 @@ const report = (over: Partial<TagImpactReport> = {}): TagImpactReport => ({
   analyzedAt: '2026-08-06T00:00:00.000Z',
   tags: [],
   campaigns: [],
+  mode: 'impact',
   noCampaignReferences: [],
   plannedDeletions: 0,
   warnings: [],
@@ -46,14 +48,14 @@ describe('renderTagImpact', () => {
   it('never uses the word "safe"', () => {
     // This report sits beside someone deleting tags in a live client account.
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null, change: 'delete' }] }),
     );
     expect(page.toLowerCase()).not.toContain('safe');
   });
 
   it('says what "no campaign references" does and does not mean', () => {
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null, change: 'delete' }] }),
     );
     expect(page).toMatch(/no campaign references/i);
     expect(page).toMatch(/not visible to this tool/i);
@@ -103,7 +105,7 @@ describe('renderTagImpact', () => {
 
   it('escapes a pipe in a name so the Markdown table survives', () => {
     const page = renderTagImpact(
-      report({ noCampaignReferences: [{ tagId: '1', tagName: 'A | B', group: null }] }),
+      report({ noCampaignReferences: [{ tagId: '1', tagName: 'A | B', group: null, change: 'delete' }] }),
     );
     const row = page.split('\n').find((l) => l.startsWith('| 1 |')) ?? '';
     expect(row).toContain('A \\| B');

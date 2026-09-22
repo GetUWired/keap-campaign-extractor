@@ -1,7 +1,7 @@
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { AccountGraph } from '../normalize/graph.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
-import type { RequestedTag, TagList } from './tagList.js';
+import type { RequestedTag, TagChange, TagList } from './tagList.js';
 
 export type LocationKind = 'trigger' | 'step' | 'decision';
 
@@ -40,6 +40,8 @@ export interface ImpactLocation {
   tagId: string;
   tagName: string;
   group: string | null;
+  /** What is planned for this tag: delete, merge, or nothing (an audit). */
+  change: TagChange;
   kind: LocationKind;
   /** The graph edge that produced this: listens-for, tests, applies or removes. */
   edgeKind: string;
@@ -57,6 +59,7 @@ export interface TagImpact {
   tagId: string;
   tagName: string;
   group: string | null;
+  change: TagChange;
   locations: ImpactLocation[];
   campaignCount: number;
 }
@@ -81,8 +84,21 @@ export interface TagImpactReport {
   analyzedAt: string;
   tags: TagImpact[];
   campaigns: CampaignImpact[];
+  /**
+   * Whether this reports on a planned change or audits the whole account.
+   *
+   * An audit's numbers mean something different — "329 of 398 campaigns
+   * reference a tag" is a truism, not a finding — so the renderers say
+   * "using" where an impact report says "affected".
+   */
+  mode: 'impact' | 'audit';
   /** Requested tags no campaign references. NOT the same as "safe to delete". */
-  noCampaignReferences: { tagId: string; tagName: string; group: string | null }[];
+  noCampaignReferences: {
+    tagId: string;
+    tagName: string;
+    group: string | null;
+    change: TagChange;
+  }[];
   /** How many affected campaigns are themselves slated for deletion. */
   plannedDeletions: number;
   warnings: string[];
@@ -213,6 +229,7 @@ export function analyzeTagImpact(
       tagId,
       tagName: tag.name,
       group: tag.group,
+      change: tag.change,
       kind: placement.kind,
       edgeKind: edge.kind,
       cellId: edge.viaCellId ?? '',
@@ -244,6 +261,7 @@ export function analyzeTagImpact(
       tagId: tag.id,
       tagName: tag.name,
       group: tag.group,
+      change: tag.change,
       locations,
       campaignCount: new Set(locations.map((l) => l.campaignId)).size,
     };
@@ -281,11 +299,18 @@ export function analyzeTagImpact(
   return {
     appName,
     analyzedAt: new Date().toISOString(),
+    // Derived, not passed: a list where nothing is being changed is an audit.
+    mode: list.tags.some((t) => t.change !== 'none') ? 'impact' : 'audit',
     tags,
     campaigns: campaignImpacts,
     noCampaignReferences: tags
       .filter((t) => t.locations.length === 0)
-      .map((t) => ({ tagId: t.tagId, tagName: t.tagName, group: t.group })),
+      .map((t) => ({
+        tagId: t.tagId,
+        tagName: t.tagName,
+        group: t.group,
+        change: t.change,
+      })),
     plannedDeletions: campaignImpacts.filter((c) => c.plannedDeletion).length,
     warnings,
   };

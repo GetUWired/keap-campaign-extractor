@@ -228,7 +228,7 @@ const state = {
   q: '',
   statuses: new Set(['live', 'stopped', 'never-published', 'unknown']),
   kinds: new Set(['trigger', 'decision', 'step']),
-  changes: new Set(['delete', 'merge']),
+  changes: new Set(['delete', 'merge', 'none']),
   plans: new Set(['deleting', 'keeping']),
   sort: 'default',
 };
@@ -239,7 +239,7 @@ const state = {
  * The list's own distinction: a tag with no group is being deleted outright, a
  * tag with one is being merged into the others sharing it.
  */
-const changeOf = (loc) => (loc.group === null || loc.group === undefined ? 'delete' : 'merge');
+const changeOf = (loc) => loc.change ?? (loc.group ? 'merge' : 'delete');
 
 /**
  * Whether merge-group names carry information.
@@ -356,8 +356,11 @@ function describe(loc) {
   tag.className = 'tag';
   line.append(tag);
   const change = changeOf(loc);
-  const label = change === 'merge' && SHOW_GROUP ? 'merge → ' + loc.group : change;
-  line.append(el('span', 'badge ' + change, label));
+  // An audit plans nothing, so a badge would be inventing intent.
+  if (change !== 'none') {
+    const label = change === 'merge' && SHOW_GROUP ? 'merge → ' + loc.group : change;
+    line.append(el('span', 'badge ' + change, label));
+  }
   return line;
 }
 
@@ -493,7 +496,7 @@ function render() {
     );
     const frag = document.createDocumentFragment();
     for (const tag of rows) {
-      const change = tag.group === null || tag.group === undefined ? 'delete' : 'merge';
+      const change = tag.change ?? (tag.group ? 'merge' : 'delete');
       const tr = el('tr');
       const idCell = el('td');
       idCell.append(el('span', 'tagid', tag.tagId));
@@ -502,9 +505,15 @@ function render() {
       nameCell.append(withMatch(tag.tagName, query.text));
       tr.append(nameCell);
       const changeCell = el('td');
-      changeCell.append(
-        el('span', 'badge ' + change, change === 'merge' && SHOW_GROUP ? 'merge → ' + tag.group : change),
-      );
+      if (change !== 'none') {
+        changeCell.append(
+          el(
+            'span',
+            'badge ' + change,
+            change === 'merge' && SHOW_GROUP ? 'merge → ' + tag.group : change,
+          ),
+        );
+      }
       tr.append(changeCell);
       frag.append(tr);
     }
@@ -571,9 +580,15 @@ function render() {
     nameCell.append(withMatch(row.tagName, q));
     tr.append(nameCell);
     const changeCell = el('td');
-    changeCell.append(
-      el('span', 'badge ' + row.change, row.change === 'merge' && SHOW_GROUP ? 'merge → ' + row.group : row.change),
-    );
+    if (row.change !== 'none') {
+      changeCell.append(
+        el(
+          'span',
+          'badge ' + row.change,
+          row.change === 'merge' && SHOW_GROUP ? 'merge → ' + row.group : row.change,
+        ),
+      );
+    }
     tr.append(changeCell);
     tr.append(el('td', 'num', String(row.campaigns.size)));
     const liveCell = el('td', 'num', String(row.live.size));
@@ -611,7 +626,7 @@ document.getElementById('q').addEventListener('input', (event) => {
 });
 const ALL_STATUSES = ['live', 'stopped', 'never-published', 'unknown'];
 const ALL_KINDS = ['trigger', 'decision', 'step'];
-const ALL_CHANGES = ['delete', 'merge'];
+const ALL_CHANGES = ['delete', 'merge', 'none'];
 const ALL_PLANS = ['deleting', 'keeping'];
 
 /** Which state set a chip belongs to. */
@@ -703,6 +718,11 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
     warnings: report.warnings,
   };
 
+  // An audit's numbers are inventory, not findings: "329 of 398 campaigns
+  // reference a tag" is a truism, and calling those campaigns "affected" would
+  // imply something is about to happen to them.
+  const audit = report.mode === 'audit';
+
   const stat = (n: number | string, k: string, cls = '') =>
     `<div class="card ${cls}"><div class="n">${escapeHtml(String(n))}</div><div class="k">${escapeHtml(k)}</div></div>`;
 
@@ -744,21 +764,21 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tag Impact — ${escapeHtml(report.appName)}</title>
+<title>${audit ? 'Tag Usage' : 'Tag Impact'} — ${escapeHtml(report.appName)}</title>
 <style>${STYLES}</style>
 </head>
 <body>
 <div class="wrap">
 <header class="top">
-  <h1>Tag impact — ${escapeHtml(report.appName)}</h1>
-  <div class="sub">${report.tags.length.toLocaleString()} tags analyzed · generated ${escapeHtml(report.analyzedAt)}</div>
+  <h1>${audit ? 'Tag usage' : 'Tag impact'} — ${escapeHtml(report.appName)}</h1>
+  <div class="sub">${report.tags.length.toLocaleString()} tags ${audit ? 'in the account' : 'analyzed'} · generated ${escapeHtml(report.analyzedAt)}</div>
   <div class="caveat">
     <strong>This analysis sees campaign usage only.</strong> Tags are also used in saved searches,
     broadcasts, manual application, internal forms and integrations, none of which is visible to this
     tool. A tag with no campaign references may still be in use elsewhere.
   </div>
   <div class="cards">
-    ${stat(report.campaigns.length, 'campaigns affected')}
+    ${stat(report.campaigns.length, audit ? 'campaigns using tags' : 'campaigns affected')}
     ${
       report.plannedDeletions === 0
         ? ''
@@ -766,9 +786,9 @@ export function renderTagImpactHtml(report: TagImpactReport): string {
     }
     ${stat(live.length, 'of them live', 'live')}
     ${stat(liveContacts.toLocaleString(), 'contacts in live campaigns', 'live')}
-    ${stat(locations.toLocaleString(), 'affected locations')}
-    ${stat(referenced.toLocaleString(), 'tags referenced')}
-    ${stat(report.noCampaignReferences.length.toLocaleString(), 'no campaign references')}
+    ${stat(locations.toLocaleString(), audit ? 'tag locations' : 'affected locations')}
+    ${stat(referenced.toLocaleString(), audit ? 'tags used by a campaign' : 'tags referenced')}
+    ${stat(report.noCampaignReferences.length.toLocaleString(), 'no campaign references', audit ? 'live' : '')}
   </div>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-view="campaigns" aria-selected="true">By campaign</button>

@@ -3,7 +3,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type DeletionList, parseDeletionList } from '../analyze/deletionList.js';
 import { analyzeTagImpact } from '../analyze/tagImpact.js';
-import { type TagList, formatFor, parseTagList } from '../analyze/tagList.js';
+import { type TagList, allAccountTags, formatFor, parseTagList } from '../analyze/tagList.js';
 import { normalizeAppName } from '../app.js';
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { AccountGraph } from '../normalize/graph.js';
@@ -26,25 +26,33 @@ async function main(): Promise<void> {
   const rawApp = argAfter(argv, '--app');
   const tagsPath = argAfter(argv, '--tags');
   const deletingPath = argAfter(argv, '--deleting');
-  if (rawApp === undefined || tagsPath === undefined) {
+  const allTags = argv.includes('--all-tags');
+  if (rawApp === undefined || (tagsPath === undefined && !allTags)) {
     fail(
-      'Usage: npm run tag-impact -- --app <appName> --tags <list.csv|list.json> ' +
+      'Usage: npm run tag-impact -- --app <appName> ' +
+        '(--tags <list.csv|list.json> | --all-tags) ' +
         '[--deleting <campaigns.csv|campaigns.json>]',
     );
     return;
   }
+  // Two different questions — which tags does this change touch, and where is
+  // every tag used — and no sensible way to mean both at once.
+  if (allTags && tagsPath !== undefined) {
+    fail('--all-tags and --tags are alternatives; pass one or the other.');
+    return;
+  }
 
   let app: string;
-  let format: 'csv' | 'json';
+  let format: 'csv' | 'json' = 'csv';
   try {
     app = normalizeAppName(rawApp);
-    format = formatFor(tagsPath);
+    if (tagsPath !== undefined) format = formatFor(tagsPath);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
     return;
   }
 
-  if (!existsSync(tagsPath)) {
+  if (tagsPath !== undefined && !existsSync(tagsPath)) {
     fail(`No tag list at ${tagsPath}`);
     return;
   }
@@ -57,11 +65,34 @@ async function main(): Promise<void> {
   }
 
   let list: TagList;
-  try {
-    list = parseTagList(await readFile(tagsPath, 'utf8'), format);
-  } catch (error) {
-    fail(`could not read the tag list — ${error instanceof Error ? error.message : String(error)}`);
-    return;
+  if (allTags) {
+    // The account's own inventory, from the REST API. Nothing else knows the
+    // full set: campaigns only reveal the tags they happen to use.
+    const catalogPath = join('artifacts', app, 'entities.json');
+    if (!existsSync(catalogPath)) {
+      fail(
+        `--all-tags needs the account's tag inventory, which is not at ${catalogPath}.\n` +
+          `Run:  KEAP_API_KEY=… npm run enrich -- --app ${app}`,
+      );
+      return;
+    }
+    const catalog = JSON.parse(await readFile(catalogPath, 'utf8')) as {
+      entities: { id: string; kind: string; name: string }[];
+    };
+    list = allAccountTags(catalog.entities ?? []);
+    if (list.tags.length === 0) {
+      fail(`${catalogPath} holds no tags. Re-run:  KEAP_API_KEY=… npm run enrich -- --app ${app}`);
+      return;
+    }
+  } else {
+    try {
+      list = parseTagList(await readFile(tagsPath as string, 'utf8'), format);
+    } catch (error) {
+      fail(
+        `could not read the tag list — ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
   }
 
   // Campaigns the operator intends to delete. Optional: without it nothing is
@@ -109,6 +140,24 @@ async function main(): Promise<void> {
     console.warn(`\n  no campaign list at ${listPath} — every status will read "unknown"`);
   }
 
+  if (allTags) {
+    // A tag a campaign uses that the account no longer has is a dangling
+    // reference. Silently dropping it would make the audit look complete.
+    const known = new Set(list.tags.map((t) => t.id));
+    const referenced = new Set(
+      graph.edges
+        .filter((e) => e.to.startsWith('tag:') && e.derived !== true)
+        .map((e) => e.to.slice('tag:'.length)),
+    );
+    const dangling = [...referenced].filter((id) => id !== '0' && !known.has(id));
+    if (dangling.length > 0) {
+      list.warnings.push(
+        `${dangling.length} tags are referenced by campaigns but are not in the account's tag ` +
+          `inventory — most likely deleted while the campaign steps that use them remain`,
+      );
+    }
+  }
+
   const report = analyzeTagImpact(
     app,
     list,
@@ -132,10 +181,14 @@ async function main(): Promise<void> {
   }
   const referenced = report.tags.filter((t) => t.locations.length > 0).length;
 
-  console.log(`\n[${app}] ${list.tags.length} tags requested`);
+  console.log(
+    `\n[${app}] ${list.tags.length} tags ${allTags ? 'in the account (audit)' : 'requested'}`,
+  );
   console.log(`  referenced by a campaign: ${referenced}`);
   console.log(`  no campaign references:   ${report.noCampaignReferences.length}`);
-  console.log(`  campaigns affected:       ${report.campaigns.length} of ${campaigns.length}`);
+  console.log(
+    `  campaigns ${allTags ? 'using a tag: ' : 'affected:     '} ${report.campaigns.length} of ${campaigns.length}`,
+  );
   const statuses = new Map<string, number>();
   for (const campaign of report.campaigns) {
     statuses.set(campaign.status, (statuses.get(campaign.status) ?? 0) + 1);

@@ -8,6 +8,7 @@ const location = (over: Partial<ImpactLocation> = {}): ImpactLocation => ({
   tagId: '646',
   tagName: 'Bought',
   group: null,
+  change: 'delete',
   kind: 'trigger',
   edgeKind: 'listens-for',
   cellId: '4',
@@ -30,8 +31,16 @@ const campaign = (over: Partial<CampaignImpact> = {}): CampaignImpact => ({
 const report = (over: Partial<TagImpactReport> = {}): TagImpactReport => ({
   appName: 'se232',
   analyzedAt: '2026-08-06T00:00:00.000Z',
-  tags: [{ tagId: '646', tagName: 'Bought', group: null, locations: [location()], campaignCount: 1 }],
+  tags: [{
+    tagId: '646',
+    tagName: 'Bought',
+    group: null,
+    change: 'delete',
+    locations: [location()],
+    campaignCount: 1,
+  }],
   campaigns: [campaign()],
+  mode: 'impact',
   noCampaignReferences: [],
   plannedDeletions: 0,
   warnings: [],
@@ -163,8 +172,8 @@ describe('renderTagImpactHtml', () => {
     const page = renderTagImpactHtml(
       report({
         noCampaignReferences: [
-          { tagId: '999', tagName: 'Unused', group: null },
-          { tagId: '998', tagName: 'Also unused', group: 'newsletter' },
+          { tagId: '999', tagName: 'Unused', group: null, change: 'delete' },
+          { tagId: '998', tagName: 'Also unused', group: 'newsletter', change: 'delete' },
         ],
       }),
     );
@@ -174,20 +183,20 @@ describe('renderTagImpactHtml', () => {
 
   it('embeds those tags with the change each one is undergoing', () => {
     const page = renderTagImpactHtml(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: 'newsletter' }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: 'newsletter', change: 'delete' }] }),
     );
     const payload = payloadOf(page) as unknown as {
       noCampaignReferences: { tagId: string; group: string | null }[];
     };
     expect(payload.noCampaignReferences).toEqual([
-      { tagId: '999', tagName: 'Unused', group: 'newsletter' },
+      { tagId: '999', tagName: 'Unused', group: 'newsletter', change: 'delete' },
     ]);
   });
 
   it('puts the caveat beside that list, not only in the header', () => {
     // This is the tab someone reads as "these are fine to delete".
     const page = renderTagImpactHtml(
-      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null }] }),
+      report({ noCampaignReferences: [{ tagId: '999', tagName: 'Unused', group: null, change: 'delete' }] }),
     );
     expect(page).toMatch(/not used by any campaign — that is all this says/i);
     expect(page).toMatch(/before removing it/i);

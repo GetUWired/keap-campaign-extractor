@@ -246,7 +246,26 @@ accepted as the id and name columns.
 > destined to become one — it says so in a warning. Add a `group` column naming each merge target
 > when you want that.
 
-### 7b. Run it
+### 7b. Or audit every tag in the account
+
+To ask "where is each of our tags used?" rather than "what does this change break", skip the list
+entirely:
+
+```bash
+npm run tag-impact -- --app se232 --all-tags
+```
+
+This reads the account's own tag inventory from `artifacts/<app>/entities.json`, so it needs
+[step 5](#step-5--resolve-names-optional) to have run. No tag carries a planned change, so the report
+switches to **audit** wording — *tag usage*, *campaigns using tags* — and the delete/merge badges and
+filter disappear rather than implying an intent you do not have.
+
+`--all-tags` and `--tags` are alternatives; passing both is refused.
+
+It also reports how many tags campaigns reference that the account no longer has — deleted tags whose
+campaign steps remain. On se232 that is **275**.
+
+### 7c. Run it
 
 
 ```bash
@@ -254,7 +273,7 @@ npm run tag-impact -- --app se232 --tags ./tags.csv
 ```
 
 If you are also deleting campaigns, pass that list too — see
-[7c](#7c-campaigns-you-are-also-deleting).
+[7c](#7d-campaigns-you-are-also-deleting).
 
 Output:
 
@@ -275,7 +294,7 @@ It writes three files to `artifacts/se232/`:
 | `tag-impact.md` | Same content as a document — good for pasting into a ticket. |
 | `tag-impact.json` | The data, for anything else you want to build. |
 
-### 7c. Campaigns you are also deleting
+### 7d. Campaigns you are also deleting
 
 A campaign that is itself being deleted does not need its broken triggers investigated. Pass the list
 and the report separates the two:
@@ -321,7 +340,7 @@ happens the report should still agree with the account as it stands.
 An id on the list that is not in the account is reported as a warning rather than quietly matching
 nothing, because it is nearly always a typo.
 
-### 7d. Read the HTML
+### 7e. Read the HTML
 
 Open `artifacts/se232/tag-impact.html` in any browser — double-click it, no server needed.
 

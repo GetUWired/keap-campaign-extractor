@@ -1,8 +1,18 @@
+/**
+ * What the operator intends to do to a tag.
+ *
+ * `none` is not a neutral default — it means no change is planned, which is
+ * every tag when the whole account is being audited rather than a list acted
+ * on. Without it an audit would badge all 6,025 tags as deletions.
+ */
+export type TagChange = 'delete' | 'merge' | 'none';
+
 export interface RequestedTag {
   id: string;
   name: string;
-  /** The combine group this tag belongs to, or null when it is being deleted outright. */
+  /** The combine group this tag belongs to, or null when it is not being merged. */
   group: string | null;
+  change: TagChange;
 }
 
 /** Spreadsheet truth: TRUE from a formula, or a hand-typed yes/x/1. */
@@ -17,6 +27,26 @@ export const MERGE_UNSPECIFIED = 'merging';
 export interface TagList {
   tags: RequestedTag[];
   warnings: string[];
+}
+
+/**
+ * Every tag in the account, with no change planned for any of them.
+ *
+ * The inventory comes from the REST API rather than an operator's spreadsheet,
+ * so it answers "what exists" instead of "what are we doing" — which is why
+ * every tag carries `change: 'none'` and the report reads as an audit.
+ */
+export function allAccountTags(entities: { id: string; kind: string; name: string }[]): TagList {
+  const tags: RequestedTag[] = [];
+  const seen = new Set<string>();
+  for (const entity of entities) {
+    if (entity.kind !== 'tag') continue;
+    const id = entity.id.startsWith('tag:') ? entity.id.slice('tag:'.length) : entity.id;
+    if (id === '' || seen.has(id)) continue;
+    seen.add(id);
+    tags.push({ id, name: entity.name, group: null, change: 'none' });
+  }
+  return { tags, warnings: [] };
 }
 
 /**
@@ -92,13 +122,19 @@ function collect(
       // operator is told rather than left to wonder which took effect.
       if (existing.group === null && entry.group !== null) {
         existing.group = entry.group;
+        existing.change = 'merge';
         warnings.push(`tag ${id} appears as both a deletion and a combine — treated as combine`);
       } else {
         warnings.push(`duplicate id ${id} was skipped; the first entry was kept`);
       }
       continue;
     }
-    seen.set(id, { id, name: entry.name.trim(), group: entry.group });
+    seen.set(id, {
+      id,
+      name: entry.name.trim(),
+      group: entry.group,
+      change: entry.group === null ? 'delete' : 'merge',
+    });
   }
   return [...seen.values()];
 }

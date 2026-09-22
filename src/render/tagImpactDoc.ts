@@ -41,12 +41,14 @@ const cell = (text: string): string => plainText(text).replace(/\|/g, '\\|');
  */
 function describeLocation(location: ImpactLocation, showGroup: boolean): string {
   const change =
-    location.group === null
-      ? '[delete]'
-      : showGroup
-        ? `[merge → ${cell(location.group)}]`
-        : '[merge]';
-  const tag = `\`${location.tagId}\` ${cell(location.tagName)} ${change}`;
+    location.change === 'none'
+      ? ''
+      : location.group === null
+        ? ' [delete]'
+        : showGroup
+          ? ` [merge → ${cell(location.group)}]`
+          : ' [merge]';
+  const tag = `\`${location.tagId}\` ${cell(location.tagName)}${change}`;
   if (location.kind === 'trigger') {
     const goal =
       location.nodeName === null || location.nodeName === undefined
@@ -87,8 +89,9 @@ function describeStatus(campaign: CampaignImpact): string {
 }
 
 export function renderTagImpact(report: TagImpactReport): string {
+  const audit = report.mode === 'audit';
   const lines: string[] = [
-    `# Tag Impact Analysis — ${report.appName}`,
+    `# Tag ${audit ? 'Usage Audit' : 'Impact Analysis'} — ${report.appName}`,
     '',
     `Generated ${report.analyzedAt}`,
     '',
@@ -105,17 +108,17 @@ export function renderTagImpact(report: TagImpactReport): string {
 
   lines.push('## Summary', '');
   lines.push('| | Count |', '|---|---|');
-  lines.push(`| Tags requested | ${report.tags.length} |`);
+  lines.push(`| Tags ${audit ? 'in the account' : 'requested'} | ${report.tags.length} |`);
   lines.push(`| Referenced by at least one campaign | ${referenced.length} |`);
   lines.push(`| No campaign references | ${report.noCampaignReferences.length} |`);
-  lines.push(`| Campaigns affected | ${report.campaigns.length} |`);
+  lines.push(`| Campaigns ${audit ? 'using a tag' : 'affected'} | ${report.campaigns.length} |`);
   if (report.plannedDeletions > 0) {
     lines.push(`| …themselves being deleted | ${report.plannedDeletions} |`);
     lines.push(
       `| …still affected afterwards | ${report.campaigns.length - report.plannedDeletions} |`,
     );
   }
-  lines.push(`| Affected locations | ${locations} |`);
+  lines.push(`| ${audit ? 'Tag' : 'Affected'} locations | ${locations} |`);
   lines.push('');
 
   // A live campaign losing an entry point is the finding; a never-published one
@@ -126,7 +129,7 @@ export function renderTagImpact(report: TagImpactReport): string {
   })).filter((row) => row.campaigns.length > 0);
 
   if (byStatus.length > 0) {
-    lines.push('### Affected campaigns by status', '');
+    lines.push(`### ${audit ? 'Campaigns' : 'Affected campaigns'} by status`, '');
     lines.push('| Status | Campaigns | Locations | Active contacts |', '|---|---|---|---|');
     for (const row of byStatus) {
       const rowLocations = row.campaigns.reduce((n, c) => n + c.locations.length, 0);
@@ -140,7 +143,7 @@ export function renderTagImpact(report: TagImpactReport): string {
 
   if (report.campaigns.length > 0) {
     lines.push(
-      '## Affected campaigns',
+      audit ? '## Campaigns using tags' : '## Affected campaigns',
       '',
       'Live campaigns first, then by number of affected locations.',
       '',
@@ -174,7 +177,13 @@ export function renderTagImpact(report: TagImpactReport): string {
     lines.push('| Tag id | Name | Change |', '|---|---|---|');
     for (const tag of report.noCampaignReferences) {
       const change =
-        tag.group === null ? 'delete' : showGroup ? `merge → ${cell(tag.group)}` : 'merge';
+        tag.change === 'none'
+          ? '—'
+          : tag.group === null
+            ? 'delete'
+            : showGroup
+              ? `merge → ${cell(tag.group)}`
+              : 'merge';
       lines.push(`| ${tag.tagId} | ${cell(tag.tagName)} | ${change} |`);
     }
     lines.push('');

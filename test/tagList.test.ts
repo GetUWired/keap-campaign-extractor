@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatFor, parseTagList } from '../src/analyze/tagList.js';
+import { allAccountTags, formatFor, parseTagList } from '../src/analyze/tagList.js';
 
 describe('formatFor', () => {
   it('chooses by extension, case-insensitively', () => {
@@ -16,8 +16,8 @@ describe('parseTagList — CSV', () => {
   it('reads id, name and group', () => {
     const csv = 'id,name,group\n13269,Nurture Emails,\n14799,Old Newsletter,newsletter\n';
     expect(parseTagList(csv, 'csv').tags).toEqual([
-      { id: '13269', name: 'Nurture Emails', group: null },
-      { id: '14799', name: 'Old Newsletter', group: 'newsletter' },
+      { id: '13269', name: 'Nurture Emails', group: null, change: 'delete' },
+      { id: '14799', name: 'Old Newsletter', group: 'newsletter', change: 'merge' },
     ]);
   });
 
@@ -25,7 +25,7 @@ describe('parseTagList — CSV', () => {
     // A plain delete list should not need an empty column.
     const csv = 'id,name\n13269,Nurture Emails\n';
     expect(parseTagList(csv, 'csv').tags).toEqual([
-      { id: '13269', name: 'Nurture Emails', group: null },
+      { id: '13269', name: 'Nurture Emails', group: null, change: 'delete' },
     ]);
   });
 
@@ -119,9 +119,41 @@ describe('parseTagList — a tag export with Delete/Merge columns', () => {
   it('leaves a plain id/name/group list alone', () => {
     const plain = 'id,name,group\n1,A,\n2,B,newsletter\n';
     expect(parseTagList(plain, 'csv').tags).toEqual([
-      { id: '1', name: 'A', group: null },
-      { id: '2', name: 'B', group: 'newsletter' },
+      { id: '1', name: 'A', group: null, change: 'delete' },
+      { id: '2', name: 'B', group: 'newsletter', change: 'merge' },
     ]);
+  });
+});
+
+describe('allAccountTags', () => {
+  const catalog = [
+    { id: 'tag:320', kind: 'tag', name: 'Submitted Widget Form' },
+    { id: 'tag:321', kind: 'tag', name: 'Bought' },
+    { id: 'product:9', kind: 'product', name: 'Not a tag' },
+  ];
+
+  it('takes every tag and nothing else', () => {
+    expect(allAccountTags(catalog).tags).toEqual([
+      { id: '320', name: 'Submitted Widget Form', group: null, change: 'none' },
+      { id: '321', name: 'Bought', group: null, change: 'none' },
+    ]);
+  });
+
+  it('plans no change, because an audit is not a plan', () => {
+    // Otherwise every tag in the account renders with a DELETE badge.
+    expect(allAccountTags(catalog).tags.every((t) => t.change === 'none')).toBe(true);
+  });
+
+  it('accepts a bare id as well as a prefixed one', () => {
+    expect(allAccountTags([{ id: '77', kind: 'tag', name: 'X' }]).tags[0]?.id).toBe('77');
+  });
+
+  it('keeps the first of a duplicate id', () => {
+    const dupes = [
+      { id: 'tag:1', kind: 'tag', name: 'First' },
+      { id: 'tag:1', kind: 'tag', name: 'Second' },
+    ];
+    expect(allAccountTags(dupes).tags).toHaveLength(1);
   });
 });
 
@@ -132,8 +164,8 @@ describe('parseTagList — JSON', () => {
       combine: [{ group: 'newsletter', tags: [{ id: '14799', name: 'Old Newsletter' }] }],
     });
     expect(parseTagList(json, 'json').tags).toEqual([
-      { id: '13269', name: 'Nurture Emails', group: null },
-      { id: '14799', name: 'Old Newsletter', group: 'newsletter' },
+      { id: '13269', name: 'Nurture Emails', group: null, change: 'delete' },
+      { id: '14799', name: 'Old Newsletter', group: 'newsletter', change: 'merge' },
     ]);
   });
 
@@ -149,7 +181,7 @@ describe('parseTagList — JSON', () => {
       combine: [{ group: 'g', tags: [{ id: '1', name: 'A' }] }],
     });
     const list = parseTagList(json, 'json');
-    expect(list.tags).toEqual([{ id: '1', name: 'A', group: 'g' }]);
+    expect(list.tags).toEqual([{ id: '1', name: 'A', group: 'g', change: 'merge' }]);
     expect(list.warnings.some((w) => /both/i.test(w))).toBe(true);
   });
 

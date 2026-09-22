@@ -2,12 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { analyzeTagImpact } from '../src/analyze/tagImpact.js';
 import type { NormalizedCampaign } from '../src/normalize/campaign.js';
 import type { CampaignSummary } from '../src/parse/campaignList.js';
+import type { TagChange, TagList } from '../src/analyze/tagList.js';
 import { buildGraph } from '../src/normalize/graph.js';
 import { makeCampaign, makeDecision, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
-const list = (tags: { id: string; name: string; group?: string | null }[]) => ({
-  tags: tags.map((t) => ({ id: t.id, name: t.name, group: t.group ?? null })),
-  warnings: [] as string[],
+const list = (
+  tags: { id: string; name: string; group?: string | null; change?: TagChange }[],
+): TagList => ({
+  tags: tags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    group: t.group ?? null,
+    change: t.change ?? (t.group ? 'merge' : 'delete'),
+  })),
+  warnings: [],
 });
 
 const tagStep = (cellId: string, tagIds: string[], isApply: string, name: string | null = null) => ({
@@ -76,6 +84,7 @@ describe('analyzeTagImpact — location kinds', () => {
         tagId: '646',
         tagName: 'Bought',
         group: null,
+        change: 'delete',
         kind: 'trigger',
         edgeKind: 'listens-for',
         cellId: '4',
@@ -169,7 +178,7 @@ describe('analyzeTagImpact — grouping and totals', () => {
   it('lists a requested tag no campaign references, without calling it safe', () => {
     const campaign = makeCampaign({ funnelId: '16' });
     const report = analyzeTagImpact('x', list([{ id: '999', name: 'Unused' }]), [campaign], buildGraph([campaign]));
-    expect(report.noCampaignReferences).toEqual([{ tagId: '999', tagName: 'Unused', group: null }]);
+    expect(report.noCampaignReferences).toEqual([{ tagId: '999', tagName: 'Unused', group: null, change: 'delete' }]);
     expect(report.tags.find((t) => t.tagId === '999')?.locations).toEqual([]);
   });
 
@@ -383,5 +392,33 @@ describe('campaigns the operator plans to delete', () => {
     const report = run(['99999']);
     expect(report.warnings.some((w) => /99999.*not in this account/i.test(w))).toBe(true);
     expect(report.plannedDeletions).toBe(0);
+  });
+});
+
+describe('audit mode', () => {
+  const campaign = makeCampaign({
+    funnelId: '16',
+    name: 'Welcome',
+    goals: [tagGoal('4', ['646'], 'Signed up')],
+  });
+
+  it('reports mode audit when no tag has a planned change', () => {
+    const audit = list([
+      { id: '646', name: 'Bought', change: 'none' },
+      { id: '999', name: 'Unused', change: 'none' },
+    ]);
+    const report = analyzeTagImpact('x', audit, [campaign], buildGraph([campaign]));
+    expect(report.mode).toBe('audit');
+    expect(report.campaigns[0]?.locations[0]?.change).toBe('none');
+    expect(report.noCampaignReferences[0]).toMatchObject({ tagId: '999', change: 'none' });
+  });
+
+  it('stays in impact mode when even one tag carries a plan', () => {
+    // A mixed list is still a plan, and its badges still mean something.
+    const mixed = list([
+      { id: '646', name: 'Bought' },
+      { id: '999', name: 'Unused', change: 'none' },
+    ]);
+    expect(analyzeTagImpact('x', mixed, [campaign], buildGraph([campaign])).mode).toBe('impact');
   });
 });
