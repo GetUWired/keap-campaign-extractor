@@ -8,6 +8,7 @@ import { CONTENT_KINDS, type ContentItemKey, type ContentKind, itemKey } from '.
 import type { NormalizedCampaign } from '../normalize/campaign.js';
 import type { NormalizedNode } from '../normalize/nodes.js';
 import type { CampaignSummary } from '../parse/campaignList.js';
+import { decodeEntities } from '../render/text.js';
 import { type ResolvedContent, type TagNameLookup, buildCampaignDoc, draftNodesOf } from './campaignDoc.js';
 import { htmlToText } from './htmlText.js';
 import { findMergeFields } from './mergeFields.js';
@@ -77,6 +78,8 @@ export interface ExportPlan {
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 const byNumericId = (a: string, b: string): number => Number(a) - Number(b);
+/** Campaign and step names come from the campaign XML, still entity-encoded (`&#39;`); decode for display. */
+const decodedName = (name: string | null): string | null => (name === null ? null : decodeEntities(name));
 
 function uniqueKeys(keys: ContentItemKey[]): ContentItemKey[] {
   const seen = new Map<string, ContentItemKey>();
@@ -135,12 +138,14 @@ export function planExport(input: ExportInput): ExportPlan {
     refs: campaignRefs(campaign.funnelId, draftNodesOf(campaign.normalized), campaign.publishNodes),
   }));
 
-  // Account-wide usage, for sharedWith.
+  // Account-wide usage, for sharedWith. Decoded here — the campaign name still
+  // carries HTML entities from the campaign XML (`TRIP 1: 2nd traveler&#39;s
+  // info`) at this point, same as a step's raw `node.name`.
   const usage = new Map<string, Map<string, string | null>>();
   for (const { campaign, name, refs } of perCampaign) {
     for (const { key } of refs) {
       const users = usage.get(itemKey(key)) ?? new Map<string, string | null>();
-      users.set(campaign.funnelId, name);
+      users.set(campaign.funnelId, decodedName(name));
       usage.set(itemKey(key), users);
     }
   }
@@ -260,7 +265,9 @@ export function planExport(input: ExportInput): ExportPlan {
         ...staleness,
         ...secrets,
         mergeFields,
-        usedBy: refs.filter((r) => itemKey(r.key) === k).map((r) => r.use),
+        usedBy: refs
+          .filter((r) => itemKey(r.key) === k)
+          .map((r) => ({ ...r.use, name: decodedName(r.use.name) })),
         sharedWith,
         assets: assetList,
       };
@@ -319,7 +326,7 @@ export function planExport(input: ExportInput): ExportPlan {
       mergeIndex.set(field, users);
     }
     files.push({ path: `${folder}/campaign.json`, data: json(doc) });
-    manifestCampaigns.push({ funnelId: campaign.funnelId, name, folder, missingContent });
+    manifestCampaigns.push({ funnelId: campaign.funnelId, name: decodedName(name), folder, missingContent });
   }
 
   const assetCounts: Record<AssetStatus, number> = { downloaded: 0, failed: 0, tooLarge: 0, skipped: 0 };

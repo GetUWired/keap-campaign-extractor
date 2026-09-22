@@ -3,6 +3,7 @@ import type { AssetRecord } from '../src/content/assets/download.js';
 import type { ItemStatus } from '../src/content/progress.js';
 import type { StoredItem } from '../src/content/store.js';
 import { itemKey } from '../src/content/types.js';
+import { campaignFolderName } from '../src/export/paths.js';
 import { type ExportInput, type PlannedFile, planExport } from '../src/export/plan.js';
 import { makeCampaign, makeNode, makeSequence } from './fixtures/graphFixtures.js';
 
@@ -216,6 +217,47 @@ describe('planExport', () => {
 
   it('never plans a path outside the export', () => {
     for (const file of plan.files) expect(file.path).not.toMatch(/(^\/|\.\.)/);
+  });
+});
+
+describe('planExport decodes names', () => {
+  const encodedEmailNode = (cellId: string, id: string) =>
+    makeNode({
+      cellId,
+      style: 'email',
+      parent: '5',
+      name: 'TRIP 1: 2nd traveler&#39;s info',
+      references: { tagIds: [], tagCategoryIds: [], marketingEmailId: id },
+    });
+
+  it('decodes usedBy[].name, sharedWith[].name and manifest campaign names', () => {
+    const rawName = 'Welcome &amp; Onboarding';
+    const folder1 = `campaigns/${campaignFolderName('1', rawName)}`;
+    const folder2 = 'campaigns/2-re-engagement';
+    const plan = planExport(
+      input({
+        campaigns: [
+          campaign('1', rawName, [encodedEmailNode('7', '2048')]),
+          campaign('2', 'Re-engagement', [emailNode('3', '2048')]),
+        ],
+      }),
+    );
+    const files = byPath(plan.files);
+
+    const first = json(files.get(`${folder1}/emails/2048/email.json`));
+    expect(first.usedBy).toEqual([
+      { funnelId: '1', cellId: '7', style: 'email', name: "TRIP 1: 2nd traveler's info", version: 'draft' },
+    ]);
+
+    const second = json(files.get(`${folder2}/emails/2048/email.json`));
+    expect(second.sharedWith).toEqual([{ funnelId: '1', name: 'Welcome & Onboarding' }]);
+
+    expect(plan.manifest.campaigns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ funnelId: '1', name: 'Welcome & Onboarding' }),
+        expect.objectContaining({ funnelId: '2', name: 'Re-engagement' }),
+      ]),
+    );
   });
 });
 
