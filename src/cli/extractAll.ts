@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { normalizeAppName } from '../app.js';
 import { closeSession, openSession } from '../auth/session.js';
 import { isSessionExpired } from '../errors.js';
+import { EDITOR_RETRY_TIMEOUT_MS } from '../extract/campaign.js';
 import { extractOne, isCampaignComplete } from '../extract/campaignRun.js';
 import {
   emptyProgress,
@@ -143,6 +144,10 @@ async function main(): Promise<void> {
   let completed = 0;
   let failedCount = 0;
   let aborted = false;
+  // Retried once at the end rather than inline: a campaign that just timed out
+  // is the one most likely to time out again immediately, and a whole pass of
+  // other work gives the editor time to settle.
+  const failures: string[] = [];
 
   try {
     const page = await session.context.newPage();
@@ -178,6 +183,7 @@ async function main(): Promise<void> {
           break;
         }
         failedCount++;
+        failures.push(funnelId);
         const message = error instanceof Error ? error.message : String(error);
         progress = recordOutcome(
           progress,
@@ -190,6 +196,64 @@ async function main(): Promise<void> {
 
       await saveProgress(args.app, progress);
       if (args.delayMs > 0) await sleep(args.delayMs);
+    }
+
+    if (failures.length > 0 && !aborted) {
+      console.log(
+        `\n  retrying ${failures.length} failed campaign(s) with a ` +
+          `${EDITOR_RETRY_TIMEOUT_MS / 1000}s editor timeout`,
+      );
+      // A fresh page: whatever left the editor unresponsive may still be on the
+      // old one.
+      const retryPage = await session.context.newPage();
+      try {
+        for (const [index, funnelId] of failures.entries()) {
+          const label = `  [retry ${index + 1}/${failures.length}] ${funnelId}`;
+          try {
+            const result = await extractOne(
+              session,
+              retryPage,
+              args.app,
+              funnelId,
+              EDITOR_RETRY_TIMEOUT_MS,
+            );
+            progress = recordOutcome(
+              progress,
+              funnelId,
+              {
+                status: 'done',
+                at: now(),
+                cells: result.inventory.cellCount,
+                decisions: result.decisions.length,
+              },
+              now(),
+            );
+            completed++;
+            failedCount--;
+            console.log(
+              `${label} recovered — ${result.inventory.cellCount} cells, ` +
+                `${result.decisions.length} decision(s) — ${names.get(funnelId) ?? ''}`,
+            );
+          } catch (error) {
+            if (isSessionExpired(error)) {
+              aborted = true;
+              console.error(`${label} ABORT — ${error.message}`);
+              break;
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            progress = recordOutcome(
+              progress,
+              funnelId,
+              { status: 'failed', at: now(), error: message },
+              now(),
+            );
+            console.error(`${label} still failing — ${message}`);
+          }
+          await saveProgress(args.app, progress);
+        }
+      } finally {
+        await retryPage.close();
+      }
     }
 
     await writeFile(

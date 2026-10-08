@@ -124,6 +124,13 @@ This is the slow step and the only one that touches the network in bulk. It is r
 is written to `artifacts/se232/progress.json` after every campaign, so a run interrupted at campaign
 300 of 398 picks up at 301.
 
+**Failures are retried once at the end**, on a fresh page with a 90-second editor timeout instead of
+30. The editor's load time scales with campaign size, and the largest campaigns sit right on the
+default — se232's 673-cell "Africa Region Abandon Cart" passed one week and timed out the next.
+Raising the limit for every campaign would make one genuinely stuck page cost 90 seconds instead of
+30, so only the second attempt gets the longer budget. Anything still failing after the retry is
+reported as failed and left for the next run.
+
 | Flag | Meaning |
 |---|---|
 | `--force` | Re-extract campaigns already done, instead of skipping them. |

@@ -15,12 +15,23 @@ export interface CampaignRaw {
   draftXmlSha256: string;
 }
 
-const EDITOR_TIMEOUT_MS = 30_000;
+export const EDITOR_TIMEOUT_MS = 30_000;
+
+/**
+ * A longer budget for a campaign that already timed out once.
+ *
+ * The editor's load time scales with the campaign: se232's 673-cell "Africa
+ * Region Abandon Cart" sits right on the 30s edge, passing one week and
+ * failing the next. Raising the limit for everything would make a genuinely
+ * stuck page cost 90s times 415.
+ */
+export const EDITOR_RETRY_TIMEOUT_MS = 90_000;
 
 export async function extractCampaign(
   page: Page,
   baseUrl: string,
   funnelId: string,
+  timeoutMs: number = EDITOR_TIMEOUT_MS,
 ): Promise<CampaignRaw> {
   const url = `${baseUrl}/app/funnel/funnelEditor?funnelId=${encodeURIComponent(funnelId)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -33,13 +44,13 @@ export async function extractCampaign(
         return typeof el?.draftXml === 'string' && el.draftXml.length > 0;
       },
       undefined,
-      { timeout: EDITOR_TIMEOUT_MS },
+      { timeout: timeoutMs },
     );
   } catch {
     const title = await page.title();
     throw new Error(
       `campaign-editor never produced draftXml for funnelId=${funnelId} ` +
-        `after ${EDITOR_TIMEOUT_MS}ms. Final URL: ${page.url()} — page title: "${title}"`,
+        `after ${timeoutMs}ms. Final URL: ${page.url()} — page title: "${title}"`,
     );
   }
 

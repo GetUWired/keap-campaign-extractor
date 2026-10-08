@@ -50,8 +50,9 @@ export async function extractOne(
   page: Page,
   app: string,
   funnelId: string,
+  timeoutMs?: number,
 ): Promise<CampaignRunResult> {
-  const campaign = await extractCampaign(page, session.baseUrl, funnelId);
+  const campaign = await extractCampaign(page, session.baseUrl, funnelId, timeoutMs);
 
   const identity = parseIdentity(campaign.draftXml);
   const check = verifyIdentity({ app, funnelId }, identity);
