@@ -8,6 +8,11 @@ artifacts/
 *.log
 .DS_Store
 
+# API keys. The Keap Service Account Key is admin-scoped — never commit it.
+.env
+.env.*
+!.env.example
+
 # Client lists — account data, contact counts, campaign names
 tag-list.csv
 *-tag-list.csv

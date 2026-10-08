@@ -12,7 +12,7 @@
     "enumerate": "tsx src/cli/enumerate.ts",
     "extract-all": "tsx src/cli/extractAll.ts",
     "normalize": "tsx src/cli/normalize.ts",
-    "enrich": "tsx src/cli/enrich.ts",
+    "enrich": "tsx --env-file-if-exists=.env src/cli/enrich.ts",
     "fetch-content": "tsx src/cli/fetchContent.ts",
     "export": "tsx src/cli/export.ts",
     "render": "tsx src/cli/render.ts",

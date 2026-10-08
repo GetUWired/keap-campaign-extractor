@@ -173,6 +173,13 @@ You need a Keap **Service Account Key** or Personal Access Token, which you crea
 UI and pass as an environment variable. It is never written to disk by this tool and never appears in
 its error messages.
 
+To avoid retyping it, copy `.env.example` to `.env` and put the key there — `enrich` loads it
+automatically, and `.env` is gitignored. Then the command is just:
+
+```bash
+npm run enrich -- --app se232
+```
+
 Skip this and everything still works — tag names come from your own tag list, and 57% of tag steps
 already name their tag from the campaign data itself.
 
