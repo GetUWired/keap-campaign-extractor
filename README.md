@@ -53,6 +53,22 @@ The second command fetches the browser the extractor drives. It is a no-op if yo
 
 ## The short version
 
+**Refreshing an account you have already extracted** — the weekly rhythm — is one command:
+
+```bash
+npm run refresh -- --app se232
+```
+
+That runs enumerate → extract-all (forced) → enrich → normalize → tag-impact → broken-refs, stops at
+the first failure, and tells you how to resume. It takes about 25 minutes, almost all of it the
+extract. Add `--tags <list.csv>` to analyse a specific tag list instead of auditing every tag,
+`--render` to rebuild the per-campaign pages, or `--skip-extract` to rebuild just the reports from
+data already on disk, touching no network.
+
+Log in first if your session has expired: `npm run login -- --app se232`.
+
+### The first run, step by step
+
 For an account you have never touched, run these in order. Steps 1–4 are required; 5 and 6 are
 optional; 7 is the thing you probably came for.
 

@@ -18,6 +18,7 @@
     "render": "tsx src/cli/render.ts",
     "tag-impact": "tsx src/cli/tagImpact.ts",
     "broken-refs": "tsx src/cli/brokenRefs.ts",
+    "refresh": "tsx src/cli/refresh.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
