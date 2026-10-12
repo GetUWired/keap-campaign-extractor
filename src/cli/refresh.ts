@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { normalizeAppName, sessionPathFor } from '../app.js';
+import { probeSession } from '../auth/probe.js';
 
 /**
  * The whole pipeline, in the one order that works.
@@ -110,10 +111,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Checked up front rather than four minutes into the extract.
-  if (!options.skipExtract && !existsSync(sessionPathFor(app))) {
-    fail(`No saved session for "${app}". Run:  npm run login -- --app ${app}`);
-    return;
+  // Checked up front rather than twenty minutes into the extract. The file
+  // existing is not enough: an expired session is a present file, and on
+  // 12 October enumerate succeeded against cookies the funnel editor refused.
+  if (!options.skipExtract) {
+    if (!existsSync(sessionPathFor(app))) {
+      fail(`No saved session for "${app}". Run:  npm run login -- --app ${app}`);
+      return;
+    }
+    process.stdout.write(`[${app}] checking the saved session… `);
+    const probe = await probeSession(app);
+    if (!probe.ok) {
+      process.stdout.write('expired\n');
+      fail(`${probe.reason}\n\nRun:  npm run login -- --app ${app}`);
+      return;
+    }
+    process.stdout.write('ok\n');
   }
 
   const steps = planSteps(options);
